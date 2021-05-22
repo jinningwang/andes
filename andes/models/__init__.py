@@ -34,5 +34,5 @@ file_classes = OrderedDict([
                    'REGCVSG']),
     ('distributed', ['PVD1', 'ESD1']),
     ('experimental', ['PI2', 'TestDB1', 'TestPI', 'TestLagAWFreeze', 'FixedGen']),
-    ('coi', ['COI']),
+    ('coi', ['COI', 'COI2']),
 ])
