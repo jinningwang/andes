@@ -81,11 +81,12 @@ class ESD1Model(PVD1Model):
         self.Pe = Algeb(tex_name='P_e',
                         info='active power injection from ESD1',
                         e_str='v * Ipout_y - Pe',
-                        v_str='Pref')
+                        v_str='pref0')
         self.Qe = Algeb(tex_name='Q_e',
                         info='reactive power injection from ESD1',
                         e_str='v * Iqout_y - Qe',
-                        v_str='Qref')
+                        v_str='qref0')
+
 
 class ESD1(ESD1Data, ESD1Model):
     """
