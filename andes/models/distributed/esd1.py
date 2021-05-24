@@ -78,6 +78,14 @@ class ESD1Model(PVD1Model):
         self.Ipcmd.lim.lower = self.Ipmin
         self.Ipcmd.y.deps = ['Ipmin']
 
+        self.Pe = Algeb(tex_name='P_e',
+                        info='active power injection from ESD1',
+                        e_str='v * Ipout_y - Pe',
+                        v_str='Pref')
+        self.Qe = Algeb(tex_name='Q_e',
+                        info='reactive power injection from ESD1',
+                        e_str='v * Iqout_y - Qe',
+                        v_str='Qref')
 
 class ESD1(ESD1Data, ESD1Model):
     """
