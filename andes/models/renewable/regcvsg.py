@@ -41,8 +41,8 @@ class REGCVSGData(ModelData):
                            unit='s',
                            )
 
-        self.kP = NumParam(default=0.05, tex_name='k_P',
-                           info='Active power droop on frequency (equivalent Droop)',
+        self.kw = NumParam(default=0.0, tex_name=r'k_\omega',
+                           info='speed droop on active power (reciprocal of droop)',
                            unit='p.u.',
                            ipower=True,
                            )
@@ -53,11 +53,11 @@ class REGCVSGData(ModelData):
                            )
 
         self.M = NumParam(default=10, tex_name='M',
-                          info='Emulated startup time constant (inertia)',
+                          info='Emulated startup time constant (M=2H)',
                           unit='s',
                           power=True,
                           )
-        self.D = NumParam(default=2, tex_name='D',
+        self.D = NumParam(default=0, tex_name='D',
                           info='Emulated damping coefficient',
                           unit='p.u.',
                           power=True,
@@ -125,11 +125,10 @@ class REGCVSGData(ModelData):
                                )
 
 
-class REGCVSGModel(Model):
+class REGCVSGModelBase(Model):
     """
-    REGC_VSG implementation.
+    Common variables and services for VSG models.
     """
-
     def __init__(self, system, config):
         Model.__init__(self, system, config)
         self.flags.tds = True
@@ -182,9 +181,6 @@ class REGCVSGModel(Model):
         self.ixs = ConstService(v_str='1/xs',
                                 tex_name=r'1/xs',
                                 )
-        self.ikP = ConstService(v_str='1/kP',
-                                tex_name=r'1/kP',
-                                )
         self.Id0 = ConstService(tex_name=r'I_{d0}',
                                 v_str='u * Pref / v',
                                 )
@@ -208,7 +204,7 @@ class REGCVSGModel(Model):
 
         self.Pref2 = Algeb(tex_name=r'P_{ref2}',
                            info='active power reference after adjusted by frequency',
-                           e_str='u * Pref - dw * ikP - Pref2',
+                           e_str='u * Pref - dw * kw - Pref2',
                            v_str='u * Pref')
 
         self.vref2 = Algeb(tex_name=r'v_{ref2}',
@@ -244,20 +240,6 @@ class REGCVSGModel(Model):
                         e_str='- u * v * sin(delta - a) - vq',
                         v_str='vq0')
 
-        self.PIdv = PIController(u='vref2 - vd',
-                                 kp=self.kp_dv,
-                                 ki=self.ki_dv,
-                                 x0='Id0',
-                                 )
-        self.PIqv = PIController(u='- vq',
-                                 kp=self.kp_qv,
-                                 ki=self.ki_qv,
-                                 x0='Iq0',
-                                 )
-
-        self.Idref = AliasAlgeb(self.PIdv_y)
-        self.Iqref = AliasAlgeb(self.PIqv_y)
-
         self.Pe = Algeb(tex_name='P_e',
                         info='active power injection from VSC',
                         e_str='vd * Id + vq * Iq - Pe',
@@ -276,6 +258,47 @@ class REGCVSGModel(Model):
                         info='q-axis current',
                         e_str='- ra * ixs * Iq  + ixs * (uqLag_y - vq) - Id',
                         v_str='Iq0')
+
+        self.udLag = Lag(u='udref',
+                         T=self.Tc,
+                         K=1,
+                         )
+        self.uqLag = Lag(u='uqref',
+                         T=self.Tc,
+                         K=1,
+                         )
+
+        self.ud = AliasState(self.udLag_y)
+        self.uq = AliasState(self.uqLag_y)
+
+    def v_numeric(self, **kwargs):
+        """
+        Disable the corresponding `StaticGen`s.
+        """
+        self.system.groups['StaticGen'].set(src='u', idx=self.gen.v, attr='v', value=0)
+
+
+class REGCVSGModel(REGCVSGModelBase):
+    """
+    REGC_VSG using two PI controllers each for inner and outer loops.
+    """
+
+    def __init__(self, system, config):
+        REGCVSGModelBase.__init__(self, system, config)
+
+        self.PIdv = PIController(u='vref2 - vd',
+                                 kp=self.kp_dv,
+                                 ki=self.ki_dv,
+                                 x0='Id0',
+                                 )
+        self.PIqv = PIController(u='- vq',
+                                 kp=self.kp_qv,
+                                 ki=self.ki_qv,
+                                 x0='Iq0',
+                                 )
+
+        self.Idref = AliasAlgeb(self.PIdv_y)
+        self.Iqref = AliasAlgeb(self.PIqv_y)
 
         # PIdv_y, PIqv_y are Idref, Iqref
         self.PIdi = PIController(u='PIdv_y - Id',
@@ -297,24 +320,6 @@ class REGCVSGModel(Model):
                            e_str='PIqi_y + vq + Id * xs - uqref',
                            v_str='uqref0',
                            )
-
-        self.udLag = Lag(u='udref',
-                         T=self.Tc,
-                         K=1,
-                         )
-        self.uqLag = Lag(u='uqref',
-                         T=self.Tc,
-                         K=1,
-                         )
-
-        self.ud = AliasState(self.udLag_y)
-        self.uq = AliasState(self.uqLag_y)
-
-    def v_numeric(self, **kwargs):
-        """
-        Disable the corresponding `StaticGen`s.
-        """
-        self.system.groups['StaticGen'].set(src='u', idx=self.gen.v, attr='v', value=0)
 
 
 class REGCVSG(REGCVSGData, REGCVSGModel):

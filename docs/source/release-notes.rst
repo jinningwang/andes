@@ -8,6 +8,16 @@ The APIs before v3.0.0 are in beta and may change without prior notice.
 
 v1.3 Notes
 ----------
+v1.3.9 (2021-06-02)
+```````````````````
+- Bug fixes in exciters when generators are offline.
+- Added `safe_div` function for initialization equations.
+
+v1.3.8 (2021-06-02)
+```````````````````
+- Added `REGCVSG` model for voltage-source controlled renewables.
+- Turbine governors are now aware of the generator connection status.
+
 v1.3.7 (2021-05-03)
 ```````````````````
 - Allow manually specifying variables needing initialization

@@ -171,10 +171,15 @@ class ESST3AModel(ExcBase):
                       info='Voltage transducer',
                       )
 
+        self.UEL0 = ConstService(v_str='-9999',
+                                 tex_name='U_{EL0}',
+                                 info='initial UEL input'
+                                 )
+
         self.UEL = Algeb(info='Interface var for under exc. limiter',
                          tex_name='U_{EL}',
-                         v_str='0',
-                         e_str='0 - UEL'
+                         v_str='UEL0',
+                         e_str='UEL0 - UEL'
                          )
 
         self.VE = VarService(tex_name='V_E',
@@ -184,8 +189,9 @@ class ESST3AModel(ExcBase):
 
         self.IN = Algeb(tex_name='I_N',
                         info='Input to FEX',
-                        v_str='KC * XadIfd / VE',
-                        e_str='KC * XadIfd / VE - IN',
+                        v_str='safe_div(KC * XadIfd, VE)',
+                        e_str='ue * (KC * XadIfd - VE * IN)',
+                        diag_eps=True,
                         )
 
         self.FEX = Piecewise(u=self.IN,
@@ -215,7 +221,7 @@ class ESST3AModel(ExcBase):
 
         self.vrs = Algeb(tex_name='V_{RS}',
                          info='VR subtract feedback VG',
-                         v_str='vf0 / VB_y / KM',
+                         v_str='safe_div(vf0, VB_y) / KM',
                          e_str='LAW1_y - VG_y - vrs',
                          )
 
