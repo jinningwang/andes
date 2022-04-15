@@ -23,8 +23,10 @@ class rted:
 
     Notes
     -----
-      - In ``dcm``, there are two types of generators, where the type determines the generator limtis equation
-      - All geenrators are set as Type I by default, which can be altered after instantiated
+      - In ``rted``, there are two types of generators, where the type determines the generator limtis equation
+      - All units are in p.u., where base_mva is the same of the input ``ssp.sn_mva``
+      - Offline generators will be limited to zero, uncontrollable generators will be limited to ``p0``
+      - All geenrators are set as Type I by default, which can be altered by ``def_typeII()`` after instantiated
       - Type I generator capacity limit: p_sch - prd >= pmin, p_sch + pru <= pmax
       - Type II generator capacity limit: prd <= prd_max, pru <= pru_max
     """
@@ -59,6 +61,7 @@ class rted:
         # --- c. alter gen limit, 0 for offline gen, constant for uncontrolled gen ---
         self.gendata['ctrl'] = ssp_gen.controllable.astype(int)
         ssp_gen['unctrl'] = 1 - ssp_gen.controllable
+        self.gendata['p0'] = ssp.gen.p_mw / ssp.sn_mva
         pmax = ssp_gen.in_service * (ssp_gen.controllable * ssp_gen.max_p_mw + ssp_gen.unctrl * ssp_gen.p_mw)
         pmin = ssp_gen.in_service * (ssp_gen.controllable * ssp_gen.min_p_mw + ssp_gen.unctrl * ssp_gen.p_mw)
         self.gendata['pmax'] = list(pmax / ssp.sn_mva)
@@ -333,7 +336,7 @@ class rted:
         return mdl
 
     def build(self):
-        """Build the DCOPF with SFR model"""
+        """Build RTED model (DCOPF with SFR)"""
 
         if not self.var_defined:
             logger.warning('PS vars ``dpd_u``, ``dpd_d``, ``p_pre``, ``pru_max``, ``prd_max`` are not given.'
@@ -356,7 +359,7 @@ class rted:
         return True
 
     def build_s(self):
-        """"Build standard DCOPF"""
+        """Build standard DCOPF"""
         self.mdls = gb.Model('StdDCOPF')
 
         GEN = self.gendict.keys()
@@ -376,3 +379,33 @@ class rted:
         self.mdls.addConstrs((self.p_rd[gen] == 0 for gen in GEN), name='PRD_0')
 
         return True
+
+    def get_dcres(self):
+        """
+        Get DCOPF resutlts, can be used after effectively solving the optimization problem.
+        Returns
+        ----------
+        DataFrame
+
+            The output DataFrame contains setpoints ``p_sch``,
+            SFR Up/Dn capacity ``pru`` and ``prd``,
+            and AGC Up/Dn participation factor: ``bu`` and ``bd``
+        """
+        # --- gather data --
+        pru = []
+        prd = []
+        p_sch = []
+        for gen in self.gendict.keys():
+            p_sch.append(self.p_sch[gen].X)
+            pru.append(self.p_ru[gen].X)
+            prd.append(self.p_rd[gen].X)
+        # --- build output table ---
+        dcres = pd.DataFrame()
+        dcres['stg_idx'] = self.gendata.gen_pp
+        dcres['p_sch'] = p_sch
+        dcres['pru'] = pru
+        dcres['prd'] = prd
+        dcres['bu'] = dcres['pru'] / dcres['pru'].sum()
+        dcres['bd'] = dcres['prd'] / dcres['prd'].sum()
+        dcres.fillna(0, inplace=True)
+        return dcres
