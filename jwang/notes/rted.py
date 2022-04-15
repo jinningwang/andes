@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 class rted:
     """
-    Base class of rted model, where DCOPF with SFR is modeled by Gurobipy.
+    Base class of RTED model, where DCOPF with SFR is modeled by Gurobipy.
 
     Parameters
     ----------
@@ -16,8 +16,8 @@ class rted:
 
     Attributes
     ----------
-    - `mdl`: the DCOPF with SFR model
-    - `mdls`: the standard DCOPF
+    - `rted`: the DCOPF with SFR model
+    - `dcopf`: the standard DCOPF
     - `{device}data`: DataFrame of {device}, {device} includes gen, line, load
     - `{device}dict`: Dict of {device}, {device} includes gen, line, load
 
@@ -335,7 +335,7 @@ class rted:
 
         return mdl
 
-    def build(self):
+    def build_rted(self):
         """Build RTED model (DCOPF with SFR)"""
 
         if not self.var_defined:
@@ -345,44 +345,50 @@ class rted:
             logger.warning('PS params ``c_ru``, ``c_rd``, ``rampu``, ``rampd`` are not given.'
                            'Default values will be used. They can be defined by ``def_ps``')
 
-        self.mdl = gb.Model('DCOPF+SFR')
+        self.rted = gb.Model('DCOPF+SFR')
 
         # --- A. decision vars ---
-        self.mdl = self._build_vars(self.mdl, self.gendict)
+        self.rted = self._build_vars(self.rted, self.gendict)
 
         # --- B. obj. ---
-        self.mdl = self._build_obj(self.mdl, self.gendict)
+        self.rted = self._build_obj(self.rted, self.gendict)
 
         # --- C. constraints ---
-        self.mdl = self._build_cons(self.mdl, self.gendict, self.gen2dict, self.linedict,
-                                    self.dpd_u, self.dpd_d, self.ptotal)
+        self.rted = self._build_cons(self.rted, self.gendict, self.gen2dict, self.linedict,
+                                     self.dpd_u, self.dpd_d, self.ptotal)
         return True
 
-    def build_s(self):
+    def build_sdc(self):
         """Build standard DCOPF"""
-        self.mdls = gb.Model('StdDCOPF')
+        self.dcopf = gb.Model('StdDCOPF')
 
         GEN = self.gendict.keys()
 
         # --- A. decision vars ---
-        self.mdls = self._build_vars(self.mdls, self.gendict)
+        self.dcopf = self._build_vars(self.dcopf, self.gendict)
 
         # --- B. obj. ---
-        self.mdls = self._build_obj(self.mdls, self.gendict)
+        self.dcopf = self._build_obj(self.dcopf, self.gendict)
 
         # --- C. constraints ---
         # set the SFR requirements as 0
-        self.mdls = self._build_cons(self.mdls, self.gendict, self.gen2dict, self.linedict, 0, 0, self.ptotal)
+        self.dcopf = self._build_cons(self.dcopf, self.gendict, self.gen2dict, self.linedict, 0, 0, self.ptotal)
 
         # --- limit SFR vars to 0---
-        self.mdls.addConstrs((self.p_ru[gen] == 0 for gen in GEN), name='PRU_0')
-        self.mdls.addConstrs((self.p_rd[gen] == 0 for gen in GEN), name='PRD_0')
-
+        self.dcopf.addConstrs((self.p_ru[gen] == 0 for gen in GEN), name='PRU_0')
+        self.dcopf.addConstrs((self.p_rd[gen] == 0 for gen in GEN), name='PRD_0')
         return True
 
-    def get_dcres(self):
+    def get_res(self, model='rted'):
         """
-        Get DCOPF resutlts, can be used after effectively solving the optimization problem.
+        Get optimization resutlts, can be used after effectively solving the optimization problem.
+
+        Parameters
+        ----------
+        model : str
+
+            'rted' or 'dcopf'
+
         Returns
         ----------
         DataFrame
@@ -401,11 +407,20 @@ class rted:
             prd.append(self.p_rd[gen].X)
         # --- build output table ---
         dcres = pd.DataFrame()
-        dcres['stg_idx'] = self.gendata.gen_pp
+        dcres['gen_pp'] = self.gendata.gen_pp
         dcres['p_sch'] = p_sch
         dcres['pru'] = pru
         dcres['prd'] = prd
         dcres['bu'] = dcres['pru'] / dcres['pru'].sum()
         dcres['bd'] = dcres['prd'] / dcres['prd'].sum()
         dcres.fillna(0, inplace=True)
+
+        # --- cost ---
+        mdl = getattr(self, model)
+        total_cost= mdl.getObjective().getValue()
+
+        sfr_cost = np.sum(dcres['pru'] * self.gendata.c_ru + dcres['prd'] * self.gendata.c_rd)
+        logger.warn(
+            f'{model} cost (p.u.): Total={np.round(total_cost, 3)}, '
+            + f'GEN={np.round(total_cost-sfr_cost, 3)}, SFR={np.round(sfr_cost, 3)}')
         return dcres
