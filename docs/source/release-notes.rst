@@ -15,6 +15,8 @@ Breaking change:
 
 - ``PV`` model no longer has ``p`` as a variable in the DAE. ``p`` copies the
   value of ``p0``. This change affects the addresses of variables.
+- Changed ``models.file_classes`` to a list to improve the control over
+  the class initialization sequence in the same package.
 
 Operator splitting for internal algebraic variables:
 
@@ -29,6 +31,10 @@ Operator splitting for internal algebraic variables:
 - ``VarService`` takes an argument ``sequential``, which is ``True`` by default.
   Non-sequential ``VarService`` shall not depend on other ``VarService``
   calculated at the same step as they will be evaluated simultaneously.
+- ``to_pandapower()`` set all generators as controllable by default, the name
+  of generators in converted pandapower case are named with the ``idx`` of
+  ``StaticGen``.
+- Bug fixes of ``make_link_table``.
 
 Other changes:
 
@@ -36,6 +42,7 @@ Other changes:
   ``ss.TDS.plt.plot([ss.GENROU.omega, ss.GENROU.delta], a=[0, 1])`` will plot
   the rotor speed and angles of the 0-th and the 1-st generator.
 - Added :ref:`REGCP1` model for generic converters with PLL support.
+- Fixed PSS/E parser for :ref:`HYGOV`.
 
 v1.6.3 (2022-04-06)
 -------------------
