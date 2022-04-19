@@ -156,7 +156,7 @@ class rted:
             df[f'{attr}'] = inlist
         return True
 
-    def def_type(self, gen=[]):
+    def def_typeII(self, gen=[]):
         """
         Define which generators are type II.
 
