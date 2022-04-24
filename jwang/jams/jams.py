@@ -218,8 +218,8 @@ class dcopf(system):
         # --- line limits ---
         for line in LINE:
             lhs1 = sum(self.p_sch[gen] * gen_gsfdict[gen][line] for gen in GEN)
-            # mdl.addConstr(lhs1+linedict[line]['sup'] <= linedict[line]['rate_a'], name=f'{line}_U')
-            # mdl.addConstr(lhs1+linedict[line]['sup'] >= -linedict[line]['rate_a'], name=f'{line}_D')
+            mdl.addConstr(lhs1+linedict[line]['sup'] <= linedict[line]['rate_a'], name=f'{line}_U')
+            mdl.addConstr(lhs1+linedict[line]['sup'] >= -linedict[line]['rate_a'], name=f'{line}_D')
         return mdl
 
     def get_res(self):
