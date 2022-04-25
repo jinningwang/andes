@@ -1,4 +1,4 @@
-from andes.interop.pandapower import to_pandapower, add_gencost
+from andes.interop.pandapower import to_pandapower
 from andes.interop.pandapower import make_GSF, build_group_table
 import gurobipy as gb
 import pandas as pd
@@ -251,12 +251,12 @@ class dcopf(system):
         """
         self.build()
         self.mdl.optimize()
-        logger.warning('Successfully solve DCOPF.')
         # --- check if mdl is sovled ---
         if not hasattr(self.pg[self.gen.idx[0]], 'X'):
             logger.warning('DCOPF has no valid resutls!')
             pg = [0] * self.gen.shape[0]
         else:
+            logger.warning('Successfully solve DCOPF.')
             # --- gather data --
             pg = []
             for gen in self.gendict.keys():
@@ -304,6 +304,7 @@ class rted(dcopf):
     def from_andes(self, ssa):
         super().from_andes(ssa)
         self.gen['p_pre'] = 0
+        self.gen['band'] = self.gen['pmax'] - self.gen['pmin']
 
     def to_dcopf(self):
         """
@@ -396,8 +397,10 @@ class rted(dcopf):
         self.pg = mdl.addVars(GEN, name='pg', vtype=gb.GRB.CONTINUOUS, obj=0,
                               ub=gencp.pmax.tolist(), lb=gencp.pmin.tolist())
         # --- RegUp, RegDn ---
-        self.pru = mdl.addVars(GEN, name='pru', vtype=gb.GRB.CONTINUOUS, obj=0)
-        self.prd = mdl.addVars(GEN, name='prd', vtype=gb.GRB.CONTINUOUS, obj=0)
+        self.pru = mdl.addVars(GEN, name='pru', vtype=gb.GRB.CONTINUOUS, obj=0,
+                               ub=gencp.band.tolist(), lb=[0] * gencp.shape[0])
+        self.prd = mdl.addVars(GEN, name='prd', vtype=gb.GRB.CONTINUOUS, obj=0,
+                               ub=gencp.band.tolist(), lb=[0] * gencp.shape[0])
         return mdl
 
     def _build_obj(self, mdl):
@@ -453,7 +456,7 @@ class rted(dcopf):
         mdl.addConstrs((self.pg[gen] - gendict[gen]['p_pre'] >= -1 * gendict[gen]['ramp5']
                        for gen in GEN), name='RampD')
         return mdl
-    
+
     def get_res(self):
         """
         Get resutlts, can be used after mdl.optimize().
@@ -466,7 +469,6 @@ class rted(dcopf):
         """
         self.build()
         self.mdl.optimize()
-        logger.warning('Successfully solve RTED.')
         # --- check if mdl is sovled ---
         if not hasattr(self.pg[self.gen.idx[0]], 'X'):
             logger.warning('RTED has no valid resutls!')
@@ -474,6 +476,7 @@ class rted(dcopf):
             pru = [0] * self.gen.shape[0]
             prd = [0] * self.gen.shape[0]
         else:
+            logger.warning('Successfully solve RTED.')
             # --- gather data --
             pg = []
             pru = []
@@ -495,6 +498,7 @@ class rted(dcopf):
         dcres['bd'] = dcres['prd'] / dcres['prd'].sum()
         dcres.fillna(0, inplace=True)
         return dcres
+
 
 class rted2(rted):
     """
@@ -620,5 +624,96 @@ class rted2(rted):
         mdl.addConstrs((self.pg[gen] - gendict[gen]['p_pre'] <= gendict[gen]['ramp5']
                        for gen in GEN), name='RampU')
         mdl.addConstrs((self.pg[gen] - gendict[gen]['p_pre'] >= -1 * gendict[gen]['ramp5']
+                       for gen in GEN), name='RampD')
+        return mdl
+
+
+class rted3(rted2):
+    """
+    RTED3 class, inherits from RTED2,
+    where soft boud of SFR is applied.
+
+    Punishment coeeficient for unmeet SFR
+    is set to 1000 by default.
+    """
+    def __init__(self, name='rted3'):
+        super().__init__(name)
+        self.k = 1000
+
+    def _build_obj(self, mdl):
+        GEN = self.gendict.keys()
+        gendict = self.gendict
+        costdict = self.costdict
+        # --- minimize generation cost ---
+        cost_pg = sum(self.pg[gen] * costdict[gen]['c1']
+                      + self.pg[gen] * self.pg[gen] * costdict[gen]['c2']
+                      + costdict[gen]['c0'] * gendict[gen]['u']  # online status
+                      for gen in GEN)
+        # --- RegUp, RegDn cost ---
+        cost_ru = sum(self.pru[gen] * costdict[gen]['cru'] for gen in GEN)
+        cost_rd = sum(self.prd[gen] * costdict[gen]['crd'] for gen in GEN)
+        soft_ru = self.du - sum(self.pru[gen] for gen in GEN)
+        soft_rd = self.dd - sum(self.prd[gen] for gen in GEN)
+        self.obj = mdl.setObjective(expr=cost_pg + cost_ru + cost_rd + self.k * (soft_ru + soft_rd),
+                                    sense=gb.GRB.MINIMIZE)
+        return mdl
+
+    def _build_cons(self, mdl):
+        ptotal = self.load.p0.sum()
+
+        gendict = self.gendict
+        linedict = self.linedict
+        gen_gsfdict = self.gen_gsfdict
+
+        GEN = gendict.keys()
+        LINE = linedict.keys()
+
+        # --- SFR requirements ---
+        # --- a) RegUp --
+        mdl.addConstr(sum(self.pru[gen] for gen in GEN) <= self.du, name='RegUp')
+        # --- b) RegDn --
+        mdl.addConstr(sum(self.prd[gen] for gen in GEN) <= self.dd, name='RegDn')
+
+        # --- power balance ---
+        p_sum = sum(self.pg[gen] for gen in GEN)
+        mdl.addConstr(p_sum == ptotal, name='PowerBalance')
+
+        # --- line limits ---
+        for line in LINE:
+            lhs1 = sum(self.pg[gen] * gen_gsfdict[gen][line] for gen in GEN)
+            mdl.addConstr(lhs1+linedict[line]['sup'] <= linedict[line]['rate_a'], name=f'{line}_U')
+            mdl.addConstr(lhs1+linedict[line]['sup'] >= -linedict[line]['rate_a'], name=f'{line}_D')
+
+        # --- GEN capacity ---
+        # --- filter Type II gen ---
+        gendict_I = dict()
+        for (new_key, new_value) in gendict.items():
+            if new_value['type'] == 1:
+                gendict_I[new_key] = new_value
+        gendict_II = dict()
+        for (new_key, new_value) in gendict.items():
+            if new_value['type'] == 2:
+                gendict_II[new_key] = new_value
+        GENI = gendict_I.keys()
+        GENII = gendict_II.keys()
+        # --- a Type I GEN capacity limits ---
+        mdl.addConstrs((self.pg[gen] + self.pru[gen] <= gendict[gen]['pmax'] for gen in GENI),
+                       name='PG_max')
+        mdl.addConstrs((self.pg[gen] - self.prd[gen] >= gendict[gen]['pmin'] for gen in GENI),
+                       name='PG_mim')
+        # --- b Type II Gen capacity and SFR limits---
+        mdl.addConstrs((self.pg[gen] <= gendict[gen]['pmax'] for gen in GENII),
+                       name='PG_max')
+        mdl.addConstrs((self.pg[gen] >= gendict[gen]['pmin'] for gen in GENII),
+                       name='PG_mim')
+        mdl.addConstrs((self.pru[gen] <= gendict[gen]['prumax'] for gen in GENII),
+                       name='PRU_max')
+        mdl.addConstrs((self.prd[gen] <= gendict[gen]['prdmax'] for gen in GENII),
+                       name='PRD_max')
+
+        # --- AGC ramp limits ---
+        mdl.addConstrs((self.pg[gen] - gendict[gen]['p_pre'] <= gendict[gen]['ramp5']
+                       for gen in GEN), name='RampU')
+        mdl.addConstrs((gendict[gen]['p_pre'] - self.pg[gen] <= gendict[gen]['ramp5']
                        for gen in GEN), name='RampD')
         return mdl
