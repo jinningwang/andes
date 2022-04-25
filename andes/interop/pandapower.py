@@ -146,7 +146,11 @@ def runopp_map(ssp, link_table, **kwargs):
         The power is dispatched to each ``DG`` by the power ratio ``gammap``
     """
 
-    pp.runopp(ssp, **kwargs)
+    try:
+        pp.runopp(ssp, **kwargs)
+    except:
+        pp.rundcopp(ssp, **kwargs)
+        logger.warning("ACOPF failed, DCOPF is used instead.")
 
     # take dispatch results from pp
     ssp_gen = ssp.gen.rename(columns={'name': 'stg_idx'})

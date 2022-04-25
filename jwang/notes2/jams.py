@@ -85,18 +85,18 @@ class system:
                     'pmax', 'pmin', 'v0']
         self.gen = build_group_table(ssa, 'StaticGen', stg_cols).reset_index(drop=True)
         self.gen['ctrl'] = 1
-        # TODO: later on, merge 'ramp_agc', 'ramp_10', 'ramp_30'
-        self.gen['ramp_agc'] = 100
-        self.gen['ramp_10'] = 100
-        self.gen['ramp_30'] = 100
+        # TODO: later on, merge 'ramp5', 'ramp10', 'ramp30'
+        self.gen['ramp5'] = 100
+        self.gen['ramp10'] = 200
+        self.gen['ramp30'] = 600
         # --- later on ---
-        # self.gen['ramp_agc'] = self.gen['ramp_agc'] / self.mva
-        # self.gen['ramp_10'] = self.gen['ramp_10'] / self.mva
-        # self.gen['ramp_30'] = self.gen['ramp_30'] / self.mva
-        # if self.gen['ramp_agc'].max() == 0:
-        #     self.gen['ramp_agc'] = 100
-        #     self.gen['ramp_10'] = 100
-        #     self.gen['ramp_30'] = 100
+        # self.gen['ramp5'] = self.gen['ramp5'] / self.mva
+        # self.gen['ramp10'] = self.gen['ramp10'] / self.mva
+        # self.gen['ramp30'] = self.gen['ramp30'] / self.mva
+        # if self.gen['ramp5'].max() == 0:
+        #     self.gen['ramp5'] = 100
+        #     self.gen['ramp10'] = 100
+        #     self.gen['ramp30'] = 100
 
         # --- load ---
         pq_cols = ['idx', 'u', 'name', 'bus', 'Vn', 'p0', 'q0',
@@ -183,6 +183,7 @@ class dcopf(system):
     def __init__(self, name='dcopf'):
         super().__init__(name)
         self.mdl = gb.Model(name)
+        self.res_cost = 0
 
     def build(self):
         self.update_dict()
@@ -248,7 +249,9 @@ class dcopf(system):
         DataFrame
             The output DataFrame contains setpoints ``pg``
         """
-
+        self.build()
+        self.mdl.optimize()
+        logger.warning('Successfully solve DCOPF.')
         # --- check if mdl is sovled ---
         if not hasattr(self.pg[self.gen.idx[0]], 'X'):
             logger.warning('DCOPF has no valid resutls!')
@@ -259,8 +262,8 @@ class dcopf(system):
             for gen in self.gendict.keys():
                 pg.append(self.pg[gen].X)
             # --- cost ---
-            total_cost = self.mdl.getObjective().getValue()
-            logger.info(f'Total cost={np.round(total_cost, 3)}')
+            self.res_cost = self.mdl.getObjective().getValue()
+            logger.info(f'Total cost={np.round(self.res_cost, 3)}')
         # --- build output table ---
         dcres = pd.DataFrame()
         dcres['gen'] = self.gen['idx']
@@ -300,11 +303,33 @@ class rted(dcopf):
 
     def from_andes(self, ssa):
         super().from_andes(ssa)
-        dcm = dcopf()
-        dcm.from_andes(ssa)
-        dcm.build()
-        dcm.mdl.optimize()
-        self.gen['p_pre'] = dcm.get_res()['pg']
+        self.gen['p_pre'] = 0
+
+    def to_dcopf(self):
+        """
+        Convert to DCOPF model.
+
+        Returns
+        -------
+        dcopf: dcopf
+            The output dcopf class.
+        """
+        ssd = dcopf()
+        ssd.bus = self.bus
+        ssd.gen = self.gen
+        ssd.load = self.load
+        ssd.line = self.line
+        ssd.gen_gsf = self.gen_gsf
+        ssd.cost = self.cost
+        return ssd
+
+    def set_p_pre(self):
+        """
+        Get ``p_pre`` from DCOPF.
+        """
+        ssd = self.to_dcopf()
+        self.gen['p_pre'] = ssd.get_res()['pg']
+        logger.warning('Successfully set p_pre from DCOPF results.')
 
     def def_sfr(self, du, dd):
         """
@@ -336,9 +361,9 @@ class rted(dcopf):
         if not hasattr(self, 'dd'):
             self.dd = 0
             logger.warning('No RegDn requirement data (``dd``), set to 0.')
-        if not hasattr(self.gen, 'ramp_agc'):
-            self.gen['ramp_agc'] = 20
-            logger.warning('No ramp AGC data (``ramp_agc`` in ``gen``), set to 20.')
+        if not hasattr(self.gen, 'ramp5'):
+            self.gen['ramp5'] = 20
+            logger.warning('No ramp AGC data (``ramp5`` in ``gen``), set to 20.')
 
     def build(self):
         """
@@ -422,10 +447,10 @@ class rted(dcopf):
         # --- b) RegDn --
         mdl.addConstr(sum(self.prd[gen] for gen in GEN) == self.dd, name='RegDn')
 
-        # --- AGC ramp limits ---
-        mdl.addConstrs((self.pg[gen] - gendict[gen]['p_pre'] <= gendict[gen]['ramp_agc']
+        # --- ramp limits ---
+        mdl.addConstrs((self.pg[gen] - gendict[gen]['p_pre'] <= gendict[gen]['ramp5']
                        for gen in GEN), name='RampU')
-        mdl.addConstrs((gendict[gen]['p_pre'] - self.pg[gen] <= gendict[gen]['ramp_agc']
+        mdl.addConstrs((self.pg[gen] - gendict[gen]['p_pre'] >= -1 * gendict[gen]['ramp5']
                        for gen in GEN), name='RampD')
         return mdl
     
@@ -439,11 +464,15 @@ class rted(dcopf):
             The output DataFrame contains setpoints ``pg``
 
         """
-
+        self.build()
+        self.mdl.optimize()
+        logger.warning('Successfully solve RTED.')
         # --- check if mdl is sovled ---
         if not hasattr(self.pg[self.gen.idx[0]], 'X'):
-            logger.warning('DCOPF has no valid resutls!')
+            logger.warning('RTED has no valid resutls!')
             pg = [0] * self.gen.shape[0]
+            pru = [0] * self.gen.shape[0]
+            prd = [0] * self.gen.shape[0]
         else:
             # --- gather data --
             pg = []
@@ -454,8 +483,8 @@ class rted(dcopf):
                 pru.append(self.pru[gen].X)
                 prd.append(self.prd[gen].X)
             # --- cost ---
-            total_cost = self.mdl.getObjective().getValue()
-            logger.info(f'Total cost={np.round(total_cost, 3)}')
+            self.res_cost = self.mdl.getObjective().getValue()
+            logger.info(f'Total cost={np.round(self.res_cost, 3)}')
         # --- build output table ---
         dcres = pd.DataFrame()
         dcres['gen'] = self.gen['idx']
@@ -587,9 +616,9 @@ class rted2(rted):
         # --- b) RegDn --
         mdl.addConstr(sum(self.prd[gen] for gen in GEN) == self.dd, name='RegDn')
 
-        # --- AGC ramp limits ---
-        mdl.addConstrs((self.pg[gen] - gendict[gen]['p_pre'] <= gendict[gen]['ramp_agc']
+        # --- ramp limits ---
+        mdl.addConstrs((self.pg[gen] - gendict[gen]['p_pre'] <= gendict[gen]['ramp5']
                        for gen in GEN), name='RampU')
-        mdl.addConstrs((gendict[gen]['p_pre'] - self.pg[gen] <= gendict[gen]['ramp_agc']
+        mdl.addConstrs((self.pg[gen] - gendict[gen]['p_pre'] >= -1 * gendict[gen]['ramp5']
                        for gen in GEN), name='RampD')
         return mdl
