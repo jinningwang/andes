@@ -113,7 +113,7 @@ class rted:
                         'left', 'bus').fillna(0).rename(columns={'p_mw': 'gen'})
         sup = sup.merge(ssp.load[['bus', 'p_mw']], 'left', 'bus').fillna(0).rename(columns={'p_mw': 'load'})
         sup['uc'] = 1 - sup.controllable
-        sup['net'] = sup.uc * (sup.gen-sup.load) / ssp.sn_mva
+        sup['net'] = sup.uc * (0-sup.load) / ssp.sn_mva
         sup2 = sup.groupby('bus').sum().reset_index(drop=True)
         sup2['bus'] = sup2.index
         sup2 = sup[['bus', 'net']].groupby('bus').sum().reset_index(drop=True)
