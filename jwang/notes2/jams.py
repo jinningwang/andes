@@ -55,8 +55,8 @@ class system:
         else:
             mdl_list = model
         for mdl in mdl_list:
-            mdl_df = getattr(self, mdl)
-            mdl_df.index = mdl_df.index
+            mdl_df = getattr(self, mdl).copy()
+            mdl_df.set_index(['idx'], inplace=True)
             setattr(self, mdl+'dict', mdl_df.T.to_dict())
 
     def from_andes(self, ssa):
@@ -123,7 +123,9 @@ class system:
         gsf_matrix = make_GSF(ssp)
         self.gsf_matrix = gsf_matrix
         gsfdata = pd.DataFrame(gsf_matrix)
-        gsfdata['line'] = self.line['idx']
+        gsfdata.columns = self.bus['idx']
+        gsfdata['line'] = self.line.idx
+        gsfdata.set_index('line', inplace=True)
         gsfT = gsfdata.T
         gsfT['bus'] = self.bus['idx']
         self.gen_gsf = self.gen[['idx', 'name', 'bus']].merge(gsfT, on='bus', how='left')
@@ -426,7 +428,44 @@ class rted(dcopf):
         mdl.addConstrs((gendict[gen]['p_pre'] - self.pg[gen] <= gendict[gen]['ramp_agc']
                        for gen in GEN), name='RampD')
         return mdl
+    
+    def get_res(self):
+        """
+        Get resutlts, can be used after mdl.optimize().
 
+        Returns
+        -------
+        DataFrame
+            The output DataFrame contains setpoints ``pg``
+
+        """
+
+        # --- check if mdl is sovled ---
+        if not hasattr(self.pg[self.gen.idx[0]], 'X'):
+            logger.warning('DCOPF has no valid resutls!')
+            pg = [0] * self.gen.shape[0]
+        else:
+            # --- gather data --
+            pg = []
+            pru = []
+            prd = []
+            for gen in self.gendict.keys():
+                pg.append(self.pg[gen].X)
+                pru.append(self.pru[gen].X)
+                prd.append(self.prd[gen].X)
+            # --- cost ---
+            total_cost = self.mdl.getObjective().getValue()
+            logger.info(f'Total cost={np.round(total_cost, 3)}')
+        # --- build output table ---
+        dcres = pd.DataFrame()
+        dcres['gen'] = self.gen['idx']
+        dcres['pg'] = pg
+        dcres['pru'] = pru
+        dcres['prd'] = prd
+        dcres['bu'] = dcres['pru'] / dcres['pru'].sum()
+        dcres['bd'] = dcres['prd'] / dcres['prd'].sum()
+        dcres.fillna(0, inplace=True)
+        return dcres
 
 class rted2(rted):
     """
