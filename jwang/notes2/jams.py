@@ -659,7 +659,7 @@ class rted3(rted2):
         # --- laod cost ---
         ptotal = self.load.p0.sum()
         pg = sum(self.pg[gen] for gen in GEN)
-        cost_load = self.kl *(ptotal - pg)
+        cost_load = self.kl * (ptotal - pg)
         self.obj = mdl.setObjective(expr=cost_pg + cost_sfr + cost_load,
                                     sense=gb.GRB.MINIMIZE)
         return mdl
