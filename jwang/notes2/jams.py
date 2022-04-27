@@ -633,12 +633,13 @@ class rted3(rted2):
     RTED3 class, inherits from RTED2,
     where soft boud of SFR is applied.
 
-    Punishment coeeficient for unmeet SFR
-    is set to 1000 by default.
+    Punishment coeeficient for insufficient SFR and load
+    are set to 1000 and 2000 by default.
     """
     def __init__(self, name='rted3'):
         super().__init__(name)
-        self.k = 1000
+        self.ks = 1000
+        self.kl = 2000
 
     def _build_obj(self, mdl):
         GEN = self.gendict.keys()
@@ -654,7 +655,12 @@ class rted3(rted2):
         cost_rd = sum(self.prd[gen] * costdict[gen]['crd'] for gen in GEN)
         soft_ru = self.du - sum(self.pru[gen] for gen in GEN)
         soft_rd = self.dd - sum(self.prd[gen] for gen in GEN)
-        self.obj = mdl.setObjective(expr=cost_pg + cost_ru + cost_rd + self.k * (soft_ru + soft_rd),
+        cost_sfr = cost_ru + cost_rd + self.ks * (soft_ru + soft_rd)
+        # --- laod cost ---
+        ptotal = self.load.p0.sum()
+        pg = sum(self.pg[gen] for gen in GEN)
+        cost_load = self.kl *(ptotal - pg)
+        self.obj = mdl.setObjective(expr=cost_pg + cost_sfr + cost_load,
                                     sense=gb.GRB.MINIMIZE)
         return mdl
 
@@ -676,7 +682,7 @@ class rted3(rted2):
 
         # --- power balance ---
         p_sum = sum(self.pg[gen] for gen in GEN)
-        mdl.addConstr(p_sum == ptotal, name='PowerBalance')
+        mdl.addConstr(p_sum <= ptotal, name='PowerBalance')
 
         # --- line limits ---
         for line in LINE:
