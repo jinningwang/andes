@@ -10,6 +10,7 @@ v1.6 Notes
 ==========
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 v1.6.6 (2022-04-xx)
 -------------------
 - Renamed ``[System] call_stats`` to ``[System] save_stats`` for clarity.
@@ -18,6 +19,15 @@ v1.6.6 (2022-04-xx)
   algebraic variables, the default setting automatically adjusts the upper limit
   but not the lower.
 =======
+=======
+v1.6.7 (2022-05-xx)
+-------------------
+- Fix the initialization of offline synchronous generators.
+- Allow styles to be set for plots using the argument ``style``. To generate
+  figures for IEEE publications, use ``style=ieee`` (require package
+  ``scienceplots``).
+
+>>>>>>> devcui
 v1.6.6 (2022-04-30)
 -------------------
 - Rename ``[System] call_stats`` to ``[System] save_stats`` for clarity. If
