@@ -96,7 +96,7 @@ Input signals: $\mathbf{u}$, $\mathbf{v}$, ($N_s \times1$)
 
 If $P_i > 0$ (RegUp):
 
-First (a) CS $\rightarrow$ IS, then (b) IS $\rightarrow$ DS. The EVs that have higher SoC levels are more likely to be altered.
+First (a) CS $\rightarrow$ IS, then (b) IS $\rightarrow$ DS. The EVs having higher SoC levels are more likely to be altered.
 
 $ r_u = min(P_i, P_a)/(P_{ave}N_e)$
 
@@ -106,15 +106,9 @@ $ r_v = max(P_i - P_a, 0)/(P_{ave}N_e)$
 
 $ v_j = min(r_v -\sum_{h=j+1}^{N_s}(x_{h+N_s}+ u_h), x_{j+N_s}+ u_j), j=[1, ..., N_s] $
 
-If $P_i = 0$:
-
-$\mathbf{u} = \mathbf{0}$
-
-$\mathbf{v} = \mathbf{0}$
-
 If $P_i < 0$ (RegDn):
 
-First (c) DS $\rightarrow$ IS, then (d) IS $\rightarrow$ CS. The EVs that have lower SoC levels are more likely to be altered.
+First (c) DS $\rightarrow$ IS, then (d) IS $\rightarrow$ CS. The EVs having lower SoC levels are more likely to be altered.
 
 $ r_v = max(P_i, P_c)/(P_{ave}N_e)$
 
@@ -123,6 +117,14 @@ $ v_j = max(r_v +\sum_{h=1}^{j-1}(x_{h-1+2N_s}), -x_{j+2N_s}), j=[1, ..., N_s] $
 $ r_u = min(P_i - P_c, 0)/(P_{ave}N_e)$
 
 $ u_j = max(r_u -\sum_{h=1}^{j} v_{h}-\sum_{h=1}^{j-1} u_{h}, -x_{j+N_s}), j=[1, ..., N_s] $
+
+
+
+If $P_i = 0$:
+
+$\mathbf{u} = \mathbf{0}$
+
+$\mathbf{v} = \mathbf{0}$
 
 NOTE:
 
