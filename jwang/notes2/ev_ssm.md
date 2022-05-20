@@ -18,6 +18,8 @@ Considering the SoC as multiple levels $SoC_1$, $SoC_2$, ..., $SoC_{Ns}$, an EV 
 
 For a population of EVs, the EVs can be described by the state vector $\mathbf{x}(k)$, where each element stands for the propotion of a state.
 
+Test markdown
+
 ## State transition
 
 $\mathbf{x}(k+1) = \mathbf{A}\mathbf{x}(k)+\mathbf{B}\mathbf{u}(k)+\mathbf{C}\mathbf{v}(k)$
@@ -48,27 +50,19 @@ NOTE:
 
 1. in this format, the rated charging and discharging power are mixed together, can be inaccurate.
 
-2.***TODO***: correction for random traveling behavior?
+TODO: correction for random traveling behavior?
 
 ## Output
 
 ### Responding modes
 
-(a) CS $\rightarrow$ IS,
+(a) CS $\rightarrow$ IS, $ P_a = (\mathbf{D_a}-\mathbf{D})\mathbf{x}(k)$
 
-$ P_a = (\mathbf{D_a}-\mathbf{D})\mathbf{x}(k)$
+(b) IS $\rightarrow$ DS, $ P_b = (\mathbf{D_b}-\mathbf{D_a})\mathbf{x}(k)$
 
-(b) IS $\rightarrow$ DS,
+(c) DS $\rightarrow$ IS, $ P_c = (\mathbf{D_c}-\mathbf{D})\mathbf{x}(k)$
 
-$ P_b = (\mathbf{D_b}-\mathbf{D_a})\mathbf{x}(k)$
-
-(c) DS $\rightarrow$ IS,
-
-$ P_c = (\mathbf{D_c}-\mathbf{D})\mathbf{x}(k)$
-
-(d) IS $\rightarrow$ CS,
-
-$ P_d = (\mathbf{D_c}-\mathbf{D_d})\mathbf{x}(k)$
+(d) IS $\rightarrow$ CS, $ P_d = (\mathbf{D_c}-\mathbf{D_d})\mathbf{x}(k)$
 
 $\mathbf{D_a} = P_{ave} N_{e} [\mathbf{0}_{1\times N_s}, \mathbf{0}_{1\times N_s}, \mathbf{1}_{1\times N_s}] $
 
@@ -82,9 +76,9 @@ NOTE:
 
 1.$\mathbf{D_c}$ is different from the paper
 
-2.***TODO***: The limits may need revision: ***overcharge*** and ***overdischarge*** are out of service
+TODO: The limits may need revision: ***overcharge*** and ***overdischarge*** are out of service
 
-2.***TODO***: low charged EVs are out of service and forced to charge
+TODO: low charged EVs are out of service and forced to charge
 
 ### Output range
 
@@ -180,15 +174,17 @@ fis: I -> C
 
 fds: D -> I
 
+TODO: The results do not make much sense?
+
 ## Sensitivity
 
-Impacts pf EV penetration rate on the performance of AGC response
+Impacts of EV penetration rate on the performance of AGC response
 
 ## Senario
 
-S1: High SoC level. EVs are in high SoC level, mainly RegUp
+S1: High SoC level. EVs are in high SoC level, mainly RegUp (demanded charged EVs are switched from CS to IS or DS)
 
-S2: Low SoC level. EVs are in low SoC level, mainly RegDn
+S2: Low SoC level. EVs are in low SoC level, mainly RegDn (demanded charged EVs are switched from DS to IS or CS)
 
 ## Misc
 
