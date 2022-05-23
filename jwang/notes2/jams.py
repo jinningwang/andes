@@ -152,7 +152,8 @@ class system:
         self.cost['c2'] = 0
         self.cost['c1'] = 1
         self.cost['c0'] = 0
-        self.cost['cr'] = 0
+        self.cost['cru'] = 0
+        self.cost['crd'] = 0
 
 
 class dcopf(system):
@@ -414,7 +415,7 @@ class rted(dcopf):
                       for gen in GEN)
         # --- RegUp, RegDn cost ---
         cost_ru = sum(self.pru[gen] * costdict[gen]['cru'] for gen in GEN)
-        cost_rd = sum(self.pru[gen] * costdict[gen]['crd'] for gen in GEN)
+        cost_rd = sum(self.prd[gen] * costdict[gen]['crd'] for gen in GEN)
         self.obj = mdl.setObjective(expr=cost_pg + cost_ru + cost_rd, sense=gb.GRB.MINIMIZE)
         return mdl
 
@@ -714,7 +715,7 @@ class rted3(rted2):
                        name='PG_mim')
         mdl.addConstrs((self.pru[gen] <= gendict[gen]['prumax'] for gen in GENII),
                        name='PRU_max')
-        mdl.addConstrs((self.prd[gen] <= gendict[gen]['prdmax'] for gen in GENII),
+        mdl.addConstrs((self.prd[gen] >= -1 * gendict[gen]['prdmax'] for gen in GENII),
                        name='PRD_max')
 
         # --- AGC ramp limits ---
