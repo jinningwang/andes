@@ -33,6 +33,8 @@ class DAETimeSeries:
         self._hs = OrderedDict()
         self._is = OrderedDict()
 
+        self.idx_ptr = 0  # index pointer to the beginning of data that should be written
+
     def unpack_np(self, attr, warn_empty=True):
         """
         Unpack dict data into numpy arrays.
@@ -79,7 +81,7 @@ class DAETimeSeries:
 
         return True
 
-    def unpack(self, df=False, attr=None):
+    def unpack(self, df=False, attr=None, warn_empty=True):
         """
         Unpack dict-stored data into arrays and/or dataframes.
 
@@ -96,7 +98,7 @@ class DAETimeSeries:
         True when done.
         """
 
-        self.unpack_np(attr=attr)
+        self.unpack_np(attr=attr, warn_empty=warn_empty)
         if df is True:
             self.unpack_df(attr=attr)
 
@@ -234,7 +236,9 @@ class DAETimeSeries:
         self.unpack_np(attr=None, warn_empty=False)
         self.unpack_df(attr=None)
 
-        self._idx_ptr = 0
+        self.idx_ptr = 0
+
+        logger.debug("TimeSeries storage is cleared.")
 
 
 class DAE:
@@ -294,6 +298,7 @@ class DAE:
         self.system = system
         self.t = np.array(0.0, dtype=float)
         self.ts = DAETimeSeries(self)
+        self.kcount = 0  # time step count
 
         self._array_and_counter = {
             'f': 'n',  # differential equation RHS
@@ -329,7 +334,7 @@ class DAE:
         self.tpl = dict()  # sparsity templates with constants
 
         self._write_append = False  # True if data should be appended when writing to output
-        self._idx_ptr = 0  # index pointer to the beginning of data that should be written
+        self._lst_written = False
 
     def request_address(self, array_name: str, ndevice, nvar, collate=False):
         """
@@ -662,6 +667,9 @@ class DAE:
 
     @property
     def x_name_output(self):
+        """
+        Return a list of state var names selected by Output.
+        """
         if self.system.Output.n == 0:
             return self.x_name
         else:
@@ -669,6 +677,10 @@ class DAE:
 
     @property
     def y_name_output(self):
+        """
+        Return a list of algeb var names selected by Output.
+        """
+
         if self.system.Output.n == 0:
             return self.y_name
         else:
@@ -676,6 +688,10 @@ class DAE:
 
     @property
     def x_tex_name_output(self):
+        """
+        Return a list of state var LaTeX names selected by Output.
+        """
+
         if self.system.Output.n == 0:
             return self.x_tex_name
         else:
@@ -683,6 +699,10 @@ class DAE:
 
     @property
     def y_tex_name_output(self):
+        """
+        Return a list of algeb var LaTeX names selected by Output.
+        """
+
         if self.system.Output.n == 0:
             return self.y_tex_name
         else:
@@ -779,6 +799,9 @@ class DAE:
             succeed flag
         """
 
+        if self._lst_written is True:
+            return
+
         system = self.system
 
         out = ''
@@ -806,6 +829,8 @@ class DAE:
         with open(lst_path, 'w') as f:
             f.write(out)
 
+        self._lst_written = True
+
         return True
 
     def write_npy(self, file_path):
@@ -825,6 +850,7 @@ class DAE:
         """
 
         tds = self.system.TDS
+        ts = self.ts
 
         if not tds.config.limit_store:
             # write the whole TimeSeries in one step
@@ -834,23 +860,31 @@ class DAE:
         else:
             # create a new npz file and write for the first time
             if self._write_append is False:
-                txyz_data = self.ts.txyz[self._idx_ptr:, :]
+                txyz_data = self.ts.txyz[ts.idx_ptr:, :]
                 np.savez_compressed(file_path, data=txyz_data)
                 self._write_append = True
-                self._idx_ptr = len(self.ts.t)
+                ts.idx_ptr = len(self.ts.t)
 
             # write and append to an existing npz file
             else:
                 self.ts.unpack()
-                txyz_data = self.ts.txyz[self._idx_ptr:, :]
+                txyz_data = self.ts.txyz[ts.idx_ptr:, :]
+
+                # skip if no new data
+                if len(txyz_data) == 0:
+                    logger.debug("No new data to write to file. Skipped.")
+                    return
 
                 data = np.load(file_path)['data']
+
+                # in most cases, append new data to the existing
                 if len(data) > 0:
-                    # in case the previous step stopped at tf=0
                     data = np.vstack((data, txyz_data))
+                    logger.debug("Appended new data to output file.")
+
+                # in case the previous step stopped at tf=0
                 else:
-                    # in most cases, append new data to the existing
                     data = txyz_data
 
                 np.savez_compressed(file_path, data=data)
-                self._idx_ptr = len(self.ts.t)
+                ts.idx_ptr = len(self.ts.t)
