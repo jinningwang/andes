@@ -694,7 +694,7 @@ class ev_ssm():
         else:
             pass
             self.r_agc(Pi=Pi)
-            # TODO: revise control may have conflict with `r_agc`?
+            # TODO: revise control may have conflicts with `r_agc`?
             # --- revise control ---
             # `CS` for low charged EVs
             self.ev['c'] = self.ev[['soc', 'c']].apply(
@@ -866,7 +866,7 @@ class ev_ssm():
         kde = stats.gaussian_kde(self.ev.Pc)
         Pave = 0  # P average
         step = 0.01
-        # TODO: also consider Pd?
+        # Note: Pd is assumed to be equal to Pc
         for Pl in np.arange(self.ev.Pc.min(), self.ev.Pc.max(), step):
             Pave += (kde.integrate_box(Pl, Pl+step)) * (Pl + 0.005 * step)
         Pave = Pave / 1000  # kW to MW
