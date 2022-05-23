@@ -149,20 +149,20 @@ class ev_ssm():
 
     def report(self, is_report=True):
         """
-        Report EVA.
+        Report EVA info.
         """
         # --- EV summary info ---
         self.Q = self.ev.Q.sum()/1e3
-        self.ev['wEn'] = self.ev['Q'] * self.ev['u']
-        self.wEn = self.ev.wEn.sum()/1e3
+        self.ev['wQ'] = self.ev['Q'] * self.ev['u']
+        self.wQ = self.ev.wQ.sum()/1e3
         self.ev['wsoc'] = self.ev['soc'] * self.ev['Q'] * self.ev['u']
-        self.wsoc = self.ev['wsoc'].sum() / self.wEn / 1e3
+        self.wsoc = self.ev['wsoc'].sum() / self.wQ / 1e3
         self.ev['Ps'] = self.ev[['u', 'c', 'Pc', 'Pd']].apply(
             lambda x: x[0]*x[1]*x[2] if x[1] >= 0 else x[0]*x[1]*x[3], axis=1)
         self.Pcc = -1 * self.ev.Ps[self.ev.Ps > 0].sum()/1e3
         self.Pdc = -1 * self.ev.Ps[self.ev.Ps < 0].sum()/1e3
         self.Ptc = -1 * self.ev.Ps.sum()/1e3
-        self.ev.drop(columns=['wEn', 'wsoc', 'Ps'], inplace=True)
+        self.ev.drop(columns=['wQ', 'wsoc', 'Ps'], inplace=True)
 
         cid = self.ev[self.ev.u == 1].c.value_counts().to_dict()
         msg_c = "Ctrl: "
@@ -172,7 +172,7 @@ class ev_ssm():
         if is_report:
             # --- report info ---
             msg_time = f'{self.name}: ts={np.round(self.ts, 4)}[H], {self.N} EVs, Total Q={self.Q.round(2)} MWh\n'
-            msg_soc = f"Online {self.ne}, Q={self.wEn.round(2)} MWh, SoC={self.wsoc.round(4)}\n"
+            msg_soc = f"Online {self.ne}, Q={self.wQ.round(2)} MWh, SoC={self.wsoc.round(4)}\n"
             msg_p = f"Power(MW): Pt={self.Ptc.round(4)}, Pc={self.Pcc.round(4)}, Pd={self.Pdc.round(4)}\n"
             logger.warning(msg_time + msg_soc + msg_p + msg_c)
 
@@ -595,6 +595,7 @@ class ev_ssm():
                     if self.n_step % self.Np == 0:
                         self.g_A(is_update=True)
                         self.r_state()
+                        self.report(is_report=False)
 
                 self.ts = self.g_ts(t)
                 self.g_u()  # update online status
@@ -841,6 +842,30 @@ class ev_ssm():
         out = [self.Pt, self.Pu, self.Pl, self.Pa, self.Pc]
         return out
 
+    def g_frc(self, T=1/12):
+        """
+        Estimate frequency regulation capacity (MW).
+
+        Parameters
+        ----------
+        T: float
+            time interval for RegUp and RegDn [H].
+
+        Returns
+        -------
+        out: list of float
+            [prumax, prdmax] (MW)
+        """
+        self.report(is_report=False)
+        self.ep()
+        # TODO: now the FRC estimates do not consider random traveling behavior
+        RU = self.Pu - self.Pt
+        RD = self.Pt - self.Pl
+        # TODO: 0.8 is the estimated soc demanded, may need revision
+        prumax = min((self.wsoc - 0.8) * self.wQ / T, RU)
+        prdmax = min((1 - self.wsoc) * self.wQ / T, RD)
+        return [prumax, prdmax]
+
     def g_BCD(self):
         """
         Build SSM B, C, D matrix.
@@ -886,6 +911,7 @@ class ev_ssm():
         D2 = np.ones((1, self.Ns))
         D3 = np.ones((1, self.Ns))
         self.Db = Pave * np.hstack((D1, D2, D3))
+        self.Db[0, self.Ns] = 0  # low charged EV don't DC
 
         D1 = -1 * np.ones((1, self.Ns))
         D2 = np.zeros((1, self.Ns))
@@ -896,6 +922,7 @@ class ev_ssm():
         D2 = -1 * np.ones((1, self.Ns))
         D3 = -1 * np.ones((1, self.Ns))
         self.Dd = Pave * np.hstack((D1, D2, D3))
+        self.Dd[0, 2*self.Ns-1] = 0  # high charged EV don't C
 
         return True
 
@@ -909,7 +936,13 @@ class ev_ssm():
             Power input (MW)
         """
         # --- act ---
-        u, v, us, vs = self.g_agc(Pi - self.Pr)
+        if abs(Pi) <= 1e-6:  # deadband
+            Pi_cap = 0
+        elif Pi > 0:
+            Pi_cap = min(Pi, self.prumax)
+        elif Pi < 0:
+            Pi_cap = max(Pi, -1*self.prdmax)
+        u, v, us, vs = self.g_agc(Pi_cap - self.Pr)
         self.ev.c = self.ev[['u', 'c', 'sx']].apply(lambda x: ev_agc(x, us, vs), axis=1)
         self.g_x()
 

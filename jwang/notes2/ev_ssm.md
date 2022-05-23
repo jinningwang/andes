@@ -118,8 +118,6 @@ $ r_u = min(P_i - P_c, 0)/(P_{ave}N_e)$
 
 $ u_j = max(r_u -\sum_{h=1}^{j} v_{h}-\sum_{h=1}^{j-1} u_{h}, -x_{j+N_s}), j=[1, ..., N_s] $
 
-
-
 If $P_i = 0$:
 
 $\mathbf{u} = \mathbf{0}$
@@ -187,6 +185,8 @@ Impacts of EV penetration rate on the performance of AGC response
 S1: High SoC level. EVs are in high SoC level, mainly RegUp (demanded charged EVs are switched from CS to IS or DS)
 
 S2: Low SoC level. EVs are in low SoC level, mainly RegDn (demanded charged EVs are switched from DS to IS or CS)
+
+## BUG in code
 
 ## Misc
 
