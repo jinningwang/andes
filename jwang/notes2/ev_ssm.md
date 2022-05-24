@@ -180,13 +180,17 @@ TODO: The results do not make much sense?
 
 Impacts of EV penetration rate on the performance of AGC response
 
-## Senario
+## Case Study
 
-S1: High SoC level. EVs are in high SoC level, mainly RegUp (demanded charged EVs are switched from CS to IS or DS)
+### Case
 
-S2: Low SoC level. EVs are in low SoC level, mainly RegDn (demanded charged EVs are switched from DS to IS or CS)
+1. EVs do not provide SFR
+2. EVs minaly provide RegUp; EVs are in high SoC level, demanded charged EVs are switched from CS to IS or DS
+3. EVs minaly provide RegDn; EVs are in low SoC level, demanded charged EVs are switched from DS to IS or CS
 
-## BUG in code
+Two scenarios: 10 H and 18 H.
+
+Expected results: When EV providing SFR, better AGC performance; Pr
 
 ## Misc
 
