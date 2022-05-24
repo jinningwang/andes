@@ -565,7 +565,8 @@ class ev_ssm():
         # self.reset(ts0, clean_xl=False)
 
     def run(self, tf=10, Pi=0,
-            is_update=False, is_record=False, is_test=False):
+            is_update=False, is_record=False, is_test=False,
+            disable=False):
         """
         Run the ev aggregator from ``ts`` to ``tf``.
 
@@ -583,13 +584,15 @@ class ev_ssm():
             Set `is_record=False` can speed up the simulation.
         is_test: bool
             `g_c` control mode
+        disable: bool
+            tqdm progress bar
         """
         t_step = self.step / 3600
         if tf - self.ts < 1e-5:
             logger.warning(f"{self.name}: end time {tf}[H] is too close to start time {self.ts}[H],"
                            "simulation will not start.")
         else:
-            for t in tqdm(np.arange(self.ts+t_step, tf, t_step), desc=f'{self.name} MCS'):
+            for t in tqdm(np.arange(self.ts+t_step, tf, t_step), desc=f'{self.name} MCS', disable=disable):
                 # --- update SSM A ---
                 if is_update:
                     if self.n_step % self.Np == 0:
@@ -599,6 +602,7 @@ class ev_ssm():
 
                 self.ts = self.g_ts(t)
                 self.g_u()  # update online status
+                # TODO: add warning when Pi is 0
                 self.g_c(Pi=Pi, is_test=is_test)  # update control signal
 
                 # --- update soc interval and online status ---
@@ -862,9 +866,9 @@ class ev_ssm():
         RU = self.Pu - self.Pt
         RD = self.Pt - self.Pl
         # TODO: 0.8 is the estimated soc demanded, may need revision
-        prumax = min((self.wsoc - 0.8) * self.wQ / T, RU)
-        prdmax = min((1 - self.wsoc) * self.wQ / T, RD)
-        return [prumax, prdmax]
+        self.prumax = min((self.wsoc - 0.8) * self.wQ / T, RU)
+        self.prdmax = min((1 - self.wsoc) * self.wQ / T, RD)
+        return [self.prumax, self.prdmax]
 
     def g_BCD(self):
         """
