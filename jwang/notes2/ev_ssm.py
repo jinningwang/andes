@@ -244,6 +244,7 @@ class ev_ssm():
 
         self.ep()
         self.Pr = 0  # response to AGC
+        self.Prl = [self.Pr]
 
         # --- SSM ---
         # --- input: AGC signal ---
@@ -627,6 +628,7 @@ class ev_ssm():
                 self.Pcl.append(self.Pcc)
                 self.Pdl.append(self.Pdc)
                 self.nel.append(self.ne)
+                self.Prl.append(self.Pr)
 
                 self.n_step += 1
 
