@@ -980,13 +980,12 @@ class ev_ssm():
         """
         x = self.x0.copy()
 
-        if abs(Pi) <= 1e-6:  # deadband
-            u = np.zeros(self.Ns)
-            v = np.zeros(self.Ns)
-            us = np.zeros(self.Ns+1)
-            vs = np.zeros(self.Ns+1)
+        u = np.zeros(self.Ns)
+        v = np.zeros(self.Ns)
+        us = np.zeros(self.Ns+1)
+        vs = np.zeros(self.Ns+1)
 
-        elif Pi > 0:  # RegUp
+        if Pi >= 1e-6:  # deadband0:  # RegUp
             # --- step I ---
             ru = min(Pi, self.Pa) / (self.Pave * self.ne)
             u = np.zeros(self.Ns)
@@ -1007,11 +1006,11 @@ class ev_ssm():
                 us[j] = min(safe_div(u[j], x[j]), 1)
                 vs[j] = min(safe_div(v[j], x[j+self.Ns]+u[j]), 1)
             # --- step III ---
-            us = np.insert(us, 20, 1)
-            vs = np.insert(vs, 20, 1)
+            us[-1] = 1
+            vs[-1] = 1
             # --- step IV ---
 
-        elif Pi < 0:  # RegDn
+        elif Pi <= -1e-6:  # RegDn
             # --- step I ---
             rv = max(Pi, self.Pc) / (self.Pave * self.ne)
             v = np.zeros(self.Ns)
@@ -1031,8 +1030,8 @@ class ev_ssm():
                 vs[j] = min(safe_div(-1*v[j], x[j+2*self.Ns]), 1)
                 us[j] = min(safe_div(-1*u[j], x[j+self.Ns]-v[j]), 1)
             # --- step III ---
-            us = np.insert(us, 20, -1)
-            vs = np.insert(vs, 20, -1)
+            us[-1] = -1
+            vs[-1] = -1
 
         return u, v, us, vs
 
