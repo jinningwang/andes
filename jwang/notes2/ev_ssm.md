@@ -80,6 +80,8 @@ TODO: The limits may need revision: ***overcharge*** and ***overdischarge*** are
 
 TODO: low charged EVs are out of service and forced to charge
 
+TODO: response to RegDn is not correct
+
 ### Output range
 
 $ P_u = \mathbf{D_b}\mathbf{x}(k)$

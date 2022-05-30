@@ -1,4 +1,4 @@
-"""EV SSM Model"""
+"""EV Aggregator based on State Space Modeling"""
 
 import itertools
 from tqdm import tqdm
@@ -11,7 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def ev_agc(evs, us, vs):
+def r_agc_sev(evs, us, vs):
     """
     Single EV reaction `ev.c` to ctrl signal `us` `vs`.
 
@@ -21,13 +21,13 @@ def ev_agc(evs, us, vs):
     """
     ctrl = evs[1]
     if evs[0] == 1:  # online
-        if (evs[1] == 1) & (us[-1] == 1):  # response with us1, C to I
+        if (evs[1] == 1) & (us[-1] == 1):  # response with us1, [C to I]
             ctrl = np.random.choice(a=[0, 1], p=[us[evs[2]], 1-us[evs[2]]],
                                     size=1, replace=True)[0]
         elif (evs[1] == 0) & (us[-1] == -1):  # response with us-1 [I to C]
             ctrl = np.random.choice(a=[1, 0], p=[us[evs[2]], 1-us[evs[2]]],
                                     size=1, replace=True)[0]
-        elif (evs[1] == 0) & (vs[-1] == 1):  # response with vs1 [I to D]
+        if (evs[1] == 0) & (vs[-1] == 1):  # response with vs1 [I to D]
             ctrl = np.random.choice(a=[-1, 0], p=[vs[evs[2]], 1-vs[evs[2]]],
                                     size=1, replace=True)[0]
         elif (evs[1] == -1) & (vs[-1] == -1):  # response with vs-1 [D to I]
@@ -243,15 +243,18 @@ class ev_ssm():
         self.Pdl = [self.Pdc]
 
         self.ep()
-        self.Pr = 0  # response to AGC
+        self.Pr = 0  # estimated response to AGC
         self.Prl = [self.Pr]
+        self.Prc = 0  # calculated response to AGC
+        self.Prcl = [self.Prc]
 
         # --- SSM ---
-        # --- input: AGC signal ---
+        self.Pdbd = 1e-4  # Pdbd: deadband of Power
 
         # --- output: estimated FRC ---
         self.prumax = 0
         self.prdmax = 0
+        self.g_frc()
 
         # --- adaptive soc coeff ---
         self.sdu = self.ev.socd.max()
@@ -358,6 +361,10 @@ class ev_ssm():
         self.ev['c'] = 1
         self.ev['c2'] = 0
         self.g_c(is_test=True, Pi=0)
+        # `IS` for demanded charging SoC EVs
+        self.ev['c'] = self.ev[['soc', 'c', 'socd']].apply(
+            lambda x: 0 if (x[0] >= x[2]) & (x[1] == 1) else x[1], axis=1)
+        self.ev[['c', 'c2', 'c0']] = self.ev[['c', 'c2', 'c0']].astype(int)
 
         self.find_sx()
         self.g_x()
@@ -623,12 +630,15 @@ class ev_ssm():
                     self.g_xl()
 
                 # record power
+                Pt0 = self.Ptc
                 self.report(is_report=False)
+                self.Prc = self.Ptc - Pt0
+                self.Prl.append(self.Pr)
+                self.Prcl.append(self.Prc)
                 self.Ptl.append(self.Ptc)
                 self.Pcl.append(self.Pcc)
                 self.Pdl.append(self.Pdc)
                 self.nel.append(self.ne)
-                self.Prl.append(self.Pr)
 
                 self.n_step += 1
 
@@ -700,17 +710,17 @@ class ev_ssm():
             pass
         else:
             pass
-            self.r_agc(Pi=Pi)
-            # TODO: revise control may have conflicts with `r_agc`?
-            # --- revise control ---
-            # `CS` for low charged EVs
-            self.ev['c'] = self.ev[['soc', 'c']].apply(
-                lambda x: 1 if x[0] <= self.sl else x[1], axis=1)
-
-        # --- revise control ---
-        # `IS` for demanded charging SoC EVs
-        self.ev['c'] = self.ev[['soc', 'c', 'socd']].apply(
-            lambda x: 0 if (x[0] >= x[2]) & (x[1] == 1) else x[1], axis=1)
+            if abs(Pi) > 1e-4:  # deadband
+                self.r_agc(Pi=Pi)
+            else:
+                self.r_agc(Pi=0)
+                # --- revise control ---
+                # `CS` for low charged EVs
+                self.ev['c'] = self.ev[['soc', 'c']].apply(
+                    lambda x: 1 if x[0] <= self.sl else x[1], axis=1)
+                # `IS` for demanded charging SoC EVs
+                self.ev['c'] = self.ev[['soc', 'c', 'socd']].apply(
+                    lambda x: 0 if (x[0] >= x[2]) & (x[1] == 1) else x[1], axis=1)
         # `IS` for offline EVs
         self.ev['c'] = self.ev[['c', 'u']].apply(
             lambda x: x[0]*x[1], axis=1)
@@ -867,9 +877,13 @@ class ev_ssm():
         # TODO: now the FRC estimates do not consider random traveling behavior
         RU = self.Pu - self.Pt
         RD = self.Pt - self.Pl
+        # --- demanded-SOC limited FRC is not that reasonable ---
         # TODO: 0.8 is the estimated soc demanded, may need revision
-        self.prumax = min((self.wsoc - 0.8) * self.wQ / T, RU)
-        self.prdmax = min((1 - self.wsoc) * self.wQ / T, RD)
+        # self.prumax = max(min((self.wsoc - 0.8) * self.wQ / T, RU), 0)
+        # self.prdmax = min((1 - self.wsoc) * self.wQ / T, RD)
+        # --- SSM FRC is not that reasonable ---
+        self.prumax = RU
+        self.prdmax = RD
         return [self.prumax, self.prdmax]
 
     def g_BCD(self):
@@ -941,15 +955,12 @@ class ev_ssm():
         Pi: float
             Power input (MW)
         """
-        # --- act ---
-        if abs(Pi) <= 1e-6:  # deadband
-            Pi_cap = 0
-        elif Pi > 0:
+        if Pi > 0:
             Pi_cap = min(Pi, self.prumax)
         elif Pi < 0:
             Pi_cap = max(Pi, -1*self.prdmax)
         u, v, us, vs = self.g_agc(Pi_cap - self.Pr)
-        self.ev.c = self.ev[['u', 'c', 'sx']].apply(lambda x: ev_agc(x, us, vs), axis=1)
+        self.ev.c = self.ev[['u', 'c', 'sx']].apply(lambda x: r_agc_sev(x, us, vs), axis=1)
         self.g_x()
 
         # --- record output ---
@@ -1000,8 +1011,6 @@ class ev_ssm():
                 b = x[j+self.Ns] + u[j]
                 v[j] = min(max(a, 0), b)
             # --- step II ---
-            us = np.zeros(self.Ns)
-            vs = np.zeros(self.Ns)
             for j in range(self.Ns):
                 us[j] = min(safe_div(u[j], x[j]), 1)
                 vs[j] = min(safe_div(v[j], x[j+self.Ns]+u[j]), 1)
@@ -1024,8 +1033,6 @@ class ev_ssm():
                 a = ru - np.sum(v[0:j]) - np.sum(u[0:j-1])
                 u[j] = max(min(a, 0), -1 * x[j+self.Ns])
             # --- step II ---
-            us = np.zeros(self.Ns)
-            vs = np.zeros(self.Ns)
             for j in range(self.Ns):
                 vs[j] = min(safe_div(-1*v[j], x[j+2*self.Ns]), 1)
                 us[j] = min(safe_div(-1*u[j], x[j+self.Ns]-v[j]), 1)
