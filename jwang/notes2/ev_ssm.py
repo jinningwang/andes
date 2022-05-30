@@ -632,7 +632,7 @@ class ev_ssm():
                 # record power
                 Pt0 = self.Ptc
                 self.report(is_report=False)
-                self.Prc = self.Ptc - Pt0
+                self.Prc += self.Ptc - Pt0
                 self.Prl.append(self.Pr)
                 self.Prcl.append(self.Prc)
                 self.Ptl.append(self.Ptc)
@@ -713,7 +713,6 @@ class ev_ssm():
             if abs(Pi) > 1e-4:  # deadband
                 self.r_agc(Pi=Pi)
             else:
-                self.r_agc(Pi=0)
                 # --- revise control ---
                 # `CS` for low charged EVs
                 self.ev['c'] = self.ev[['soc', 'c']].apply(
