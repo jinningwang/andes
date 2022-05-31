@@ -713,6 +713,7 @@ class ev_ssm():
             if abs(Pi) > 1e-4:  # deadband
                 self.r_agc(Pi=Pi)
             else:
+                self.r_agc(Pi=0)
                 # --- revise control ---
                 # `CS` for low charged EVs
                 self.ev['c'] = self.ev[['soc', 'c']].apply(
@@ -954,7 +955,7 @@ class ev_ssm():
         Pi: float
             Power input (MW)
         """
-        if Pi > 0:
+        if Pi >= 0:
             Pi_cap = min(Pi, self.prumax)
         elif Pi < 0:
             Pi_cap = max(Pi, -1*self.prdmax)
