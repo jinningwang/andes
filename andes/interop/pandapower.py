@@ -259,51 +259,52 @@ def _to_pp_line(ssa, ssp, ssa_bus):
                             'C': 'c_nf_per_km', 'G': 'g_us_per_km',
                             'u': 'in_service'}, inplace=True)
     line_df['in_service'] = line_df['in_service'].astype('bool')
+    setattr(ssp, 'line', line_df)
 
     tf_df = ssa_line[ssa_line['trans'] == 1].reset_index(drop=True)
-    tf_df.rename(columns={'R': 'r_ohm_per_km', 'X': 'x_ohm_per_km',
-                          'C': 'c_nf_per_km', 'G': 'g_us_per_km',
-                          'u': 'in_service'}, inplace=True)
-    tf_df['in_service'] = tf_df['in_service'].astype('bool')
+    if tf_df.shape[0] > 1:
+        tf_df.rename(columns={'R': 'r_ohm_per_km', 'X': 'x_ohm_per_km',
+                            'C': 'c_nf_per_km', 'G': 'g_us_per_km',
+                            'u': 'in_service'}, inplace=True)
+        tf_df['in_service'] = tf_df['in_service'].astype('bool')
 
-    tf_df['hv_bus'] = tf_df[['from_bus', 'to_bus', 'Vn1', 'Vn2']].apply(
-        lambda x: x[0] if x[2] >= x[3] else x[1], axis=1)
-    tf_df['lv_bus'] = tf_df[['from_bus', 'to_bus', 'Vn1', 'Vn2']].apply(
-        lambda x: x[0] if x[2] < x[3] else x[1], axis=1)
-    tf_df[['hv_bus', 'lv_bus']] = tf_df[['hv_bus', 'lv_bus']].astype('int')
-    tf_df['vn_hv_kv'] = tf_df[['from_bus', 'to_bus', 'Vn1', 'Vn2']].apply(
-        lambda x: x[2] if x[2] >= x[3] else x[3], axis=1)
-    tf_df['vn_lv_kv'] = tf_df[['from_bus', 'to_bus', 'Vn1', 'Vn2']].apply(
-        lambda x: x[2] if x[2] < x[3] else x[3], axis=1)
-    tf_df['tap_side'] = tf_df[['Vn1', 'Vn2']].apply(lambda x: 'hv' if x[0] >= x[1] else 'lv', axis=1)
+        tf_df['hv_bus'] = tf_df[['from_bus', 'to_bus', 'Vn1', 'Vn2']].apply(
+            lambda x: x[0] if x[2] >= x[3] else x[1], axis=1)
+        tf_df['lv_bus'] = tf_df[['from_bus', 'to_bus', 'Vn1', 'Vn2']].apply(
+            lambda x: x[0] if x[2] < x[3] else x[1], axis=1)
+        tf_df[['hv_bus', 'lv_bus']] = tf_df[['hv_bus', 'lv_bus']].astype('int')
+        tf_df['vn_hv_kv'] = tf_df[['from_bus', 'to_bus', 'Vn1', 'Vn2']].apply(
+            lambda x: x[2] if x[2] >= x[3] else x[3], axis=1)
+        tf_df['vn_lv_kv'] = tf_df[['from_bus', 'to_bus', 'Vn1', 'Vn2']].apply(
+            lambda x: x[2] if x[2] < x[3] else x[3], axis=1)
+        tf_df['tap_side'] = tf_df[['Vn1', 'Vn2']].apply(lambda x: 'hv' if x[0] >= x[1] else 'lv', axis=1)
 
-    tf_df['zk'] = (tf_df['r'] ** 2 + tf_df['x'] ** 2) ** 0.5
-    tf_df['sn_mva'] = 99999
-    tf_df['vk_percent'] = np.sign(tf_df['x']) * tf_df['zk'] * tf_df['sn_mva'] * 100 / ssp.sn_mva
-    tf_df['vkr_percent'] = tf_df['r'] * tf_df['sn_mva'] * 100 / ssp.sn_mva
-    tf_df['max_loading_percent'] = 100
-    tf_df['pfe_kw'] = 0
-    tf_df['i0_percent'] = -tf_df['b'] * 100 * ssp.sn_mva / tf_df['sn_mva']
-    tf_df['shift_degree'] = tf_df['phi'] * rad2deg
-    tf_df['tap_step_percent'] = abs((tf_df['tap'] - 1) * 100)
-    tf_df['tap_pos'] = np.sign((tf_df['tap'] - 1) * 100)
-    tf_df['tap_neutral'] = 0
-    tf_df['parallel'] = 1
-    tf_df['oltc'] = False
-    tf_df['tap_phase_shifter'] = False
-    tf_df['tap_step_degree'] = NaN
-    tf_df['df'] = 1
+        tf_df['zk'] = (tf_df['r'] ** 2 + tf_df['x'] ** 2) ** 0.5
+        tf_df['sn_mva'] = 99999
+        tf_df['vk_percent'] = np.sign(tf_df['x']) * tf_df['zk'] * tf_df['sn_mva'] * 100 / ssp.sn_mva
+        tf_df['vkr_percent'] = tf_df['r'] * tf_df['sn_mva'] * 100 / ssp.sn_mva
+        tf_df['max_loading_percent'] = 100
+        tf_df['pfe_kw'] = 0
+        tf_df['i0_percent'] = -tf_df['b'] * 100 * ssp.sn_mva / tf_df['sn_mva']
+        tf_df['shift_degree'] = tf_df['phi'] * rad2deg
+        tf_df['tap_step_percent'] = abs((tf_df['tap'] - 1) * 100)
+        tf_df['tap_pos'] = np.sign((tf_df['tap'] - 1) * 100)
+        tf_df['tap_neutral'] = 0
+        tf_df['parallel'] = 1
+        tf_df['oltc'] = False
+        tf_df['tap_phase_shifter'] = False
+        tf_df['tap_step_degree'] = NaN
+        tf_df['df'] = 1
 
-    trafo_cols = ['name', 'hv_bus', 'lv_bus', 'sn_mva', 'vn_hv_kv',
-                  'vn_lv_kv', 'vk_percent', 'vkr_percent', 'pfe_kw', 'i0_percent',
-                  'shift_degree', 'tap_side', 'tap_neutral',
-                  'tap_step_percent', 'tap_pos', 'in_service',
-                  'max_loading_percent', 'parallel', 'tap_phase_shifter',
-                  'tap_step_degree', 'df']
+        trafo_cols = ['name', 'hv_bus', 'lv_bus', 'sn_mva', 'vn_hv_kv',
+                    'vn_lv_kv', 'vk_percent', 'vkr_percent', 'pfe_kw', 'i0_percent',
+                    'shift_degree', 'tap_side', 'tap_neutral',
+                    'tap_step_percent', 'tap_pos', 'in_service',
+                    'max_loading_percent', 'parallel', 'tap_phase_shifter',
+                    'tap_step_degree', 'df']
 
-    tf_df[trafo_cols].reset_index(drop=True)
-    setattr(ssp, 'line', line_df)
-    setattr(ssp, 'trafo', tf_df[trafo_cols].reset_index(drop=True))
+        tf_df[trafo_cols].reset_index(drop=True)
+        setattr(ssp, 'trafo', tf_df[trafo_cols].reset_index(drop=True))
     return ssp
 
 
@@ -586,14 +587,20 @@ def _verifyGSF(ppn, gsf, tol=1e-4):
 
 def _sumPF_ppn(ppn):
     """Summarize PF results of a pandapower net"""
-    rg = pd.concat([ppn.res_gen[['p_mw']], ppn.gen[['bus']]], axis=1).rename(columns={'p_mw': 'gen'})
-    rd = pd.concat([ppn.res_load[['p_mw']], ppn.load[['bus']]], axis=1).rename(columns={'p_mw': 'demand'})
+    rg = pd.DataFrame()
+    rg['gen'] = ppn.res_gen['p_mw']
+    rg['bus'] = ppn.gen['bus']
+    rg = rg.groupby('bus').sum()
+    rg.reset_index(inplace=True)
+    rd = pd.DataFrame()
+    rd['demand'] = ppn.res_load['p_mw']
+    rd['bus'] = ppn.load['bus']
+    rd = rd.groupby('bus').sum()
+    rd.reset_index(inplace=True)
     rp = pd.DataFrame()
     rp['bus'] = ppn.bus.index
-    rp = rp.merge(rg, on='bus', how='left')
-    rp = rp.merge(rd, on='bus', how='left')
+    rp = pd.merge(rp, rg, how='left', on='bus')
+    rp = pd.merge(rp, rd, how='left', on='bus')
     rp.fillna(0, inplace=True)
     rp['ngen'] = rp['gen'] - rp['demand']
-    rp = rp.groupby('bus').sum().reset_index(drop=True)
-    rp['bus'] = rp.index
     return rp
