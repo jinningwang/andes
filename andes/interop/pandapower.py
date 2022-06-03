@@ -104,8 +104,19 @@ def make_link_table(ssa):
                        right=ssa_syg.rename(columns={'idx': 'syg_idx', 'gen': 'stg_idx'}))
     ssa_dg = pd.merge(left=ssa_key, how='right', on='stg_idx',
                       right=ssa_dg.rename(columns={'idx': 'dg_idx', 'gen': 'stg_idx'}))
+    ssa_key0 = pd.merge(left=ssa_key, how='left', on='stg_idx',
+                        right=ssa_syg[['stg_idx', 'syg_idx']])
+    ssa_key0 = pd.merge(left=ssa_key0, how='left', on='stg_idx',
+                        right=ssa_dg[['stg_idx', 'dg_idx']])
+    ssa_key0.fillna(False, inplace=True)
+    ssa_key0 ['dyr'] = ssa_key0['syg_idx'].astype(bool) + ssa_key0['dg_idx'].astype(bool)
+    ssa_key0 ['dyr'] = 1 - ssa_key0['dyr'].astype(int)
+    ssa_key0 ['dyr'] = ssa_key0['dyr'].astype(bool)
+    ssa_dyr0 = ssa_key0[ssa_key0.dyr].drop(['dyr'], axis=1)
+    ssa_dyr0['gammap'] = 1
+    ssa_dyr0['gammaq'] = 1
     # TODO: Add RenGen
-    ssa_key = pd.concat([ssa_syg, ssa_dg], axis=0)
+    ssa_key = pd.concat([ssa_syg, ssa_dg, ssa_dyr0], axis=0)
     ssa_key = pd.merge(left=ssa_key,
                        right=ssa_exc.rename(columns={'idx': 'exc_idx', 'syn': 'syg_idx'}),
                        how='left', on='syg_idx')
