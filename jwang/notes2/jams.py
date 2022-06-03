@@ -588,12 +588,11 @@ class rted2(rted):
         # --- GEN capacity ---
         # --- filter Type II gen ---
         gendict_I = dict()
-        for (new_key, new_value) in gendict.items():
-            if new_value['type'] == 1:
-                gendict_I[new_key] = new_value
         gendict_II = dict()
         for (new_key, new_value) in gendict.items():
-            if new_value['type'] == 2:
+            if int(new_value['type']) == 1:
+                gendict_I[new_key] = new_value
+            elif int(new_value['type']) == 2:
                 gendict_II[new_key] = new_value
         GENI = gendict_I.keys()
         GENII = gendict_II.keys()
@@ -692,12 +691,11 @@ class rted3(rted2):
         # --- GEN capacity ---
         # --- filter Type II gen ---
         gendict_I = dict()
-        for (new_key, new_value) in gendict.items():
-            if new_value['type'] == 1:
-                gendict_I[new_key] = new_value
         gendict_II = dict()
         for (new_key, new_value) in gendict.items():
-            if new_value['type'] == 2:
+            if int(new_value['type']) == 1:
+                gendict_I[new_key] = new_value
+            elif int(new_value['type']) == 2:
                 gendict_II[new_key] = new_value
         GENI = gendict_I.keys()
         GENII = gendict_II.keys()
