@@ -959,14 +959,24 @@ class ev_ssm():
             Pi_cap = min(Pi, self.prumax)
         elif Pi < 0:
             Pi_cap = max(Pi, -1*self.prdmax)
-        u, v, us, vs = self.g_agc(Pi_cap - self.Pr)
-        self.ev.c = self.ev[['u', 'c', 'sx']].apply(lambda x: r_agc_sev(x, us, vs), axis=1)
-        self.g_x()
-
-        # --- record output ---
-        y0 = self.ep()[0]  # self.Pt
-        self.x0 = self.x0 + np.matmul(self.B, u) + np.matmul(self.C, v)
-        self.Pr += self.ep()[0] - y0  # y - y0
+        # initialize output
+        u = np.zeros(self.Ns)
+        v = np.zeros(self.Ns)
+        us = np.zeros(self.Ns+1)
+        vs = np.zeros(self.Ns+1)
+        # corrected control
+        error = Pi_cap - self.Pr
+        iter = 0
+        while (abs(error) >= 0.005) & (iter < 10):
+            u, v, us, vs = self.g_agc(Pi_cap - self.Pr)
+            self.ev.c = self.ev[['u', 'c', 'sx']].apply(lambda x: r_agc_sev(x, us, vs), axis=1)
+            self.g_x()
+            # --- record output ---
+            y0 = self.ep()[0]  # self.Pt
+            self.x0 = self.x0 + np.matmul(self.B, u) + np.matmul(self.C, v)
+            self.Pr += self.ep()[0] - y0  # y - y0
+            error = Pi_cap - self.Pr
+            iter += 1
         return u, v, us, vs
 
     def g_agc(self, Pi):
@@ -996,7 +1006,9 @@ class ev_ssm():
         us = np.zeros(self.Ns+1)
         vs = np.zeros(self.Ns+1)
 
-        if Pi >= 1e-6:  # deadband0:  # RegUp
+        deadband = 1e-6
+
+        if Pi >= deadband:  # deadband0:  # RegUp
             # --- step I ---
             ru = min(Pi, self.Pa) / (self.Pave * self.ne)
             u = np.zeros(self.Ns)
@@ -1019,7 +1031,7 @@ class ev_ssm():
             vs[-1] = 1
             # --- step IV ---
 
-        elif Pi <= -1e-6:  # RegDn
+        elif Pi <= -deadband:  # RegDn
             # --- step I ---
             rv = max(Pi, self.Pc) / (self.Pave * self.ne)
             v = np.zeros(self.Ns)
