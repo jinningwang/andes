@@ -247,6 +247,8 @@ class ev_ssm():
         self.Prl = [self.Pr]
         self.Prc = 0  # calculated response to AGC
         self.Prcl = [self.Prc]
+        self.y = self.ep()[0]
+        self.yl = [self.y] # estiamted output power
 
         # --- SSM ---
         self.Pdbd = 1e-4  # Pdbd: deadband of Power
@@ -573,8 +575,8 @@ class ev_ssm():
         # self.reset(ts0, clean_xl=False)
 
     def run(self, tf=10, Pi=0,
-            is_update=False, is_record=False, is_test=False,
-            disable=False):
+            is_updateA=False, is_rstate=False,
+            is_test=False, disable=False):
         """
         Run the ev aggregator from ``ts`` to ``tf``.
 
@@ -602,11 +604,14 @@ class ev_ssm():
         else:
             for t in tqdm(np.arange(self.ts+t_step, tf, t_step), desc=f'{self.name} MCS', disable=disable):
                 # --- update SSM A ---
-                if is_update:
-                    if self.n_step % self.Np == 0:
+                if self.n_step % self.Np == 0:
+                    print("UPDATE")
+                    if is_updateA:
                         self.g_A(is_update=True)
+                    if is_rstate:
+                        print("Record State")
                         self.r_state()
-                        self.report(is_report=False)
+                    self.report(is_report=False)
 
                 self.ts = self.g_ts(t)
                 self.g_u()  # update online status
@@ -626,7 +631,7 @@ class ev_ssm():
                 self.find_sx()
                 self.g_x()
 
-                if is_record | is_update:
+                if is_updateA:
                     self.g_xl()
 
                 # record power
@@ -638,6 +643,7 @@ class ev_ssm():
                 self.Ptl.append(self.Ptc)
                 self.Pcl.append(self.Pcc)
                 self.Pdl.append(self.Pdc)
+                self.yl.append(self.y)
                 self.nel.append(self.ne)
 
                 self.n_step += 1
@@ -972,9 +978,11 @@ class ev_ssm():
             self.ev.c = self.ev[['u', 'c', 'sx']].apply(lambda x: r_agc_sev(x, us, vs), axis=1)
             self.g_x()
             # --- record output ---
-            y0 = self.ep()[0]  # self.Pt
+            self.y0 = self.ep()[0]  # self.Pt
+            # TODO: modification of random traveling behavior
             self.x0 = self.x0 + np.matmul(self.B, u) + np.matmul(self.C, v)
-            self.Pr += self.ep()[0] - y0  # y - y0
+            self.y = self.ep()[0]   # self.Pt
+            self.Pr += self.y - self.y0  # y - y0
             error = Pi_cap - self.Pr
             iter += 1
         return u, v, us, vs
