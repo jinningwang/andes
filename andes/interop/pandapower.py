@@ -306,13 +306,14 @@ def _to_pp_line(ssa, ssp, ssa_bus):
         tf_df['tap_phase_shifter'] = False
         tf_df['tap_step_degree'] = NaN
         tf_df['df'] = 1
+        tf_df['std_type'] = None
 
         trafo_cols = ['name', 'hv_bus', 'lv_bus', 'sn_mva', 'vn_hv_kv',
                     'vn_lv_kv', 'vk_percent', 'vkr_percent', 'pfe_kw', 'i0_percent',
                     'shift_degree', 'tap_side', 'tap_neutral',
                     'tap_step_percent', 'tap_pos', 'in_service',
                     'max_loading_percent', 'parallel', 'tap_phase_shifter',
-                    'tap_step_degree', 'df']
+                    'tap_step_degree', 'df', 'std_type']
 
         tf_df[trafo_cols].reset_index(drop=True)
         setattr(ssp, 'trafo', tf_df[trafo_cols].reset_index(drop=True))
