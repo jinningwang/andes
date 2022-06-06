@@ -459,29 +459,28 @@ class ev_ssm():
         self.A = pd.read_csv(csv).values
         logger.warning(f'{self.name}: Load A from %s.' % csv)
 
-    def plot(self, figsize=(6, 3)):
+    def plot(self, figsize=(6, 3), plt_style='default'):
         """
         Plot the results.
         """
-        plt.style.use('default')
-        with plt.style.context(['ieee']):
-            fig, ax = plt.subplots(1, 1, figsize=figsize)
-            p1 = ax.plot(self.tss, self.Ptl, label="Total")
-            p2 = ax.plot(self.tss, self.Pcl, label="Charging")
-            p3 = ax.plot(self.tss, self.Pdl, label="Discharging")
-            ax2 = ax.twinx()
-            p4 = ax2.plot(self.tss, self.nel, label='Online EVs', color='orange')
-            ax2.set_ylabel("Number")
+        plt.style.use(plt_style)
+        fig, ax = plt.subplots(1, 1, figsize=figsize)
+        p1 = ax.plot(self.tss, self.Ptl, label="Total")
+        p2 = ax.plot(self.tss, self.Pcl, label="Charging")
+        p3 = ax.plot(self.tss, self.Pdl, label="Discharging")
+        ax2 = ax.twinx()
+        p4 = ax2.plot(self.tss, self.nel, label='Online EVs', color='orange')
+        ax2.set_ylabel("Number")
 
-            ax.set_xlabel("Time [H]")
-            ax.set_ylabel("Power (MW)")
-            ax.set_title(f"{self.name}")
-            ax.set_xlim(self.tss[0], self.tss[-1])
-            ax.grid()
+        ax.set_xlabel("Time [H]")
+        ax.set_ylabel("Power (MW)")
+        ax.set_title(f"{self.name}")
+        ax.set_xlim(self.tss[0], self.tss[-1])
+        ax.grid()
 
-            lns = p1 + p2 + p3 + p4
-            labels = [l.get_label() for l in lns]
-            plt.legend(lns, labels)
+        lns = p1 + p2 + p3 + p4
+        labels = [l.get_label() for l in lns]
+        plt.legend(lns, labels)
         return fig, ax
 
     def test(self, tf=9.05):
