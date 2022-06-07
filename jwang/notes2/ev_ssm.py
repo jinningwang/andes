@@ -604,11 +604,9 @@ class ev_ssm():
             for t in tqdm(np.arange(self.ts+t_step, tf, t_step), desc=f'{self.name} MCS', disable=disable):
                 # --- update SSM A ---
                 if self.n_step % self.Np == 0:
-                    print("UPDATE")
                     if is_updateA:
                         self.g_A(is_update=True)
                     if is_rstate:
-                        print("Record State")
                         self.r_state()
                     self.report(is_report=False)
 
