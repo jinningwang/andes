@@ -649,6 +649,11 @@ class ev_ssm():
         """
         Compute A matrix: cols: x(k), row: x(k+1)
         The sum of col should be 1.
+        
+        Parameters
+        ----------
+        is_update: bool
+            incremental update. `True` for updating SSM A, `False` for generating SSM A.
         """
         # --- gather results ---
         states = []
@@ -670,6 +675,7 @@ class ev_ssm():
             for i in range(len(d)-1):
                 A0[d[i+1], d[i]] += 1
 
+        # TODO: Consider data length limit: self.lp
         if is_update:
             n = int(self.lr / (1-self.lr))
             A0 = self.A * len(data) * n * np.ones((60,))
