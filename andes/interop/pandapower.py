@@ -112,10 +112,13 @@ def make_link_table(ssa):
                         right=ssa_syg[['stg_idx', 'syg_idx']])
     ssa_key0 = pd.merge(left=ssa_key0, how='left', on='stg_idx',
                         right=ssa_dg[['stg_idx', 'dg_idx']])
+    ssa_key0 = pd.merge(left=ssa_key0, how='left', on='stg_idx',
+                        right=ssa_rg[['stg_idx', 'rg_idx']])
     ssa_key0.fillna(False, inplace=True)
-    ssa_key0 ['dyr'] = ssa_key0['syg_idx'].astype(bool) + ssa_key0['dg_idx'].astype(bool)
-    ssa_key0 ['dyr'] = 1 - ssa_key0['dyr'].astype(int)
-    ssa_key0 ['dyr'] = ssa_key0['dyr'].astype(bool)
+    ssa_key0['dyr'] = ssa_key0['syg_idx'].astype(
+        bool) + ssa_key0['dg_idx'].astype(bool) + ssa_key0['rg_idx'].astype(bool)
+    ssa_key0['dyr'] = 1 - ssa_key0['dyr'].astype(int)
+    ssa_key0['dyr'] = ssa_key0['dyr'].astype(bool)
     ssa_dyr0 = ssa_key0[ssa_key0.dyr].drop(['dyr'], axis=1)
     ssa_dyr0['gammap'] = 1
     ssa_dyr0['gammaq'] = 1
@@ -278,8 +281,8 @@ def _to_pp_line(ssa, ssp, ssa_bus):
     tf_df = ssa_line[ssa_line['trans'] == 1].reset_index(drop=True)
     if tf_df.shape[0] > 1:
         tf_df.rename(columns={'R': 'r_ohm_per_km', 'X': 'x_ohm_per_km',
-                            'C': 'c_nf_per_km', 'G': 'g_us_per_km',
-                            'u': 'in_service'}, inplace=True)
+                              'C': 'c_nf_per_km', 'G': 'g_us_per_km',
+                              'u': 'in_service'}, inplace=True)
         tf_df['in_service'] = tf_df['in_service'].astype('bool')
 
         tf_df['hv_bus'] = tf_df[['from_bus', 'to_bus', 'Vn1', 'Vn2']].apply(
@@ -312,11 +315,11 @@ def _to_pp_line(ssa, ssp, ssa_bus):
         tf_df['std_type'] = None
 
         trafo_cols = ['name', 'hv_bus', 'lv_bus', 'sn_mva', 'vn_hv_kv',
-                    'vn_lv_kv', 'vk_percent', 'vkr_percent', 'pfe_kw', 'i0_percent',
-                    'shift_degree', 'tap_side', 'tap_neutral',
-                    'tap_step_percent', 'tap_pos', 'in_service',
-                    'max_loading_percent', 'parallel', 'tap_phase_shifter',
-                    'tap_step_degree', 'df', 'std_type']
+                      'vn_lv_kv', 'vk_percent', 'vkr_percent', 'pfe_kw', 'i0_percent',
+                      'shift_degree', 'tap_side', 'tap_neutral',
+                      'tap_step_percent', 'tap_pos', 'in_service',
+                      'max_loading_percent', 'parallel', 'tap_phase_shifter',
+                      'tap_step_degree', 'df', 'std_type']
 
         tf_df[trafo_cols].reset_index(drop=True)
         setattr(ssp, 'trafo', tf_df[trafo_cols].reset_index(drop=True))
