@@ -126,7 +126,7 @@ def make_link_table(ssa):
     ssa_key = pd.merge(left=ssa_key,
                        right=ssa_gov.rename(columns={'idx': 'gov_idx', 'syn': 'syg_idx'}),
                        how='left', on='syg_idx')
-    cols = ['stg_name', 'stg_u', 'stg_idx', 'bus_idx', 'dg_idx', 'syg_idx', 'exc_idx',
+    cols = ['stg_name', 'stg_u', 'stg_idx', 'bus_idx', 'dg_idx', 'rg_idx', 'syg_idx', 'exc_idx',
             'gov_idx', 'bus_name', 'gammap', 'gammaq']
     return ssa_key[cols].reset_index(drop=True)
 
