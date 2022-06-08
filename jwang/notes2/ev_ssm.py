@@ -377,8 +377,10 @@ class ev_ssm():
         self.ne = self.ev.u.sum()
 
         ev_cols = ['u', 'u0',  'soc', 'bd', 'c', 'c2', 'c0', 'sx', 'dP', 'xl',
-                   'soci', 'socd', 'Pc', 'Pd', 'nc', 'nd', 'Q', 'ts', 'tf', ]
+                   'soci', 'socd', 'Pc', 'Pd', 'nc', 'nd', 'Q', 'ts', 'tf']
         self.ev = self.ev[ev_cols]
+        self.ev['agc'] = 0  # `agc` is indicator of AGC response
+        self.ev['mod'] = 0  # `mod` is indicator of control modification
 
         self.g_BCD()
 
@@ -632,9 +634,9 @@ class ev_ssm():
                     self.g_xl()
 
                 # record power
-                Pt0 = self.Ptc
                 self.report(is_report=False)
-                self.Prc += self.Ptc - Pt0
+                # Actual response power only calculate AGC switched power
+                self.Prc += np.sum(self.ev.agc * self.ev.Pc * (1 - self.ev['mod'])) * 1e-3  # to MW
                 self.Prl.append(self.Pr)
                 self.Prcl.append(self.Prc)
                 self.Ptl.append(self.Ptc)
@@ -727,9 +729,13 @@ class ev_ssm():
                 # `CS` for low charged EVs
                 self.ev['c'] = self.ev[['soc', 'c']].apply(
                     lambda x: 1 if x[0] <= self.sl else x[1], axis=1)
+                self.ev['mod'] = self.ev[['soc', 'c']].apply(
+                    lambda x: 1 if x[0] <= self.sl else 0, axis=1)
                 # `IS` for demanded charging SoC EVs
                 self.ev['c'] = self.ev[['soc', 'c', 'socd']].apply(
                     lambda x: 0 if (x[0] >= x[2]) & (x[1] == 1) else x[1], axis=1)
+                self.ev['mod'] = self.ev[['soc', 'c', 'socd']].apply(
+                    lambda x: 1 if (x[0] >= x[2]) & (x[1] == 1) else 0, axis=1)
         # `IS` for offline EVs
         self.ev['c'] = self.ev[['c', 'u']].apply(
             lambda x: x[0]*x[1], axis=1)
@@ -976,6 +982,7 @@ class ev_ssm():
         # corrected control
         error = Pi_cap - self.Pr
         iter = 0
+        c0 = self.ev.c.copy()
         while (abs(error) >= 0.005) & (iter < 10):
             u, v, us, vs = self.g_agc(Pi_cap - self.Pr)
             self.ev.c = self.ev[['u', 'c', 'sx']].apply(lambda x: r_agc_sev(x, us, vs), axis=1)
@@ -985,9 +992,12 @@ class ev_ssm():
             # TODO: modification of random traveling behavior
             self.x0 = self.x0 + np.matmul(self.B, u) + np.matmul(self.C, v)
             self.y = self.ep()[0]   # self.Pt
-            self.Pr += self.y - self.y0  # y - y0
+            # dx0 = np.matmul(self.B, u) + np.matmul(self.C, v)
+            # self.Pr = np.matmul(self.D, dx0)[0]
+            self.Pr += self.y - self.y0
             error = Pi_cap - self.Pr
             iter += 1
+        self.ev['agc'] = c0 - self.ev.c
         return u, v, us, vs
 
     def g_agc(self, Pi):
