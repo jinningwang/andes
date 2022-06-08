@@ -93,6 +93,8 @@ def make_link_table(ssa):
     ssa_syg = build_group_table(ssa, 'SynGen', ['idx', 'bus', 'gen', 'gammap', 'gammaq'], ['GENCLS', 'GENROU'])
     # build DG df
     ssa_dg = build_group_table(ssa, 'DG', ['idx', 'bus', 'gen', 'gammap', 'gammaq'])
+    # build RG df
+    ssa_rg = build_group_table(ssa, 'RenGen', ['idx', 'bus', 'gen', 'gammap', 'gammaq'])
 
     # output
     ssa_bus = ssa.Bus.as_df()[['name', 'idx']]
@@ -104,6 +106,8 @@ def make_link_table(ssa):
                        right=ssa_syg.rename(columns={'idx': 'syg_idx', 'gen': 'stg_idx'}))
     ssa_dg = pd.merge(left=ssa_key, how='right', on='stg_idx',
                       right=ssa_dg.rename(columns={'idx': 'dg_idx', 'gen': 'stg_idx'}))
+    ssa_rg = pd.merge(left=ssa_key, how='right', on='stg_idx',
+                      right=ssa_rg.rename(columns={'idx': 'rg_idx', 'gen': 'stg_idx'}))
     ssa_key0 = pd.merge(left=ssa_key, how='left', on='stg_idx',
                         right=ssa_syg[['stg_idx', 'syg_idx']])
     ssa_key0 = pd.merge(left=ssa_key0, how='left', on='stg_idx',
@@ -115,8 +119,7 @@ def make_link_table(ssa):
     ssa_dyr0 = ssa_key0[ssa_key0.dyr].drop(['dyr'], axis=1)
     ssa_dyr0['gammap'] = 1
     ssa_dyr0['gammaq'] = 1
-    # TODO: Add RenGen
-    ssa_key = pd.concat([ssa_syg, ssa_dg, ssa_dyr0], axis=0)
+    ssa_key = pd.concat([ssa_syg, ssa_dg, ssa_rg, ssa_dyr0], axis=0)
     ssa_key = pd.merge(left=ssa_key,
                        right=ssa_exc.rename(columns={'idx': 'exc_idx', 'syn': 'syg_idx'}),
                        how='left', on='syg_idx')
