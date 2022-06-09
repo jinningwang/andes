@@ -461,11 +461,41 @@ class ev_ssm():
         self.A = pd.read_csv(csv).values
         logger.warning(f'{self.name}: Load A from %s.' % csv)
 
-    def plot(self, figsize=(6, 3), plt_style='default'):
+    def plot_agc(self, figsize=(6, 3), style='default'):
+        """
+        Plot the AGC results.
+
+        Parameters
+        ----------
+        figsize: tuple
+            Figure size.
+        style: str
+            Plt style.
+        """
+        plt.style.use(style)
+        fig, ax = plt.subplots(1, 1, figsize=figsize)
+        ax.plot(self.tss, self.Prl, label="Control")
+        ax.plot(self.tss, self.Prcl, label="Response")
+
+        ax.set_xlabel("Time [H]")
+        ax.set_ylabel("Power (MW)")
+        ax.set_title(f"AGC response")
+        ax.set_xlim(self.tss[0], self.tss[-1])
+        ax.grid()
+        return fig, ax
+
+    def plot(self, figsize=(6, 3), style='default'):
         """
         Plot the results.
+
+        Parameters
+        ----------
+        figsize: tuple
+            Figure size.
+        style: str
+            Plt style.
         """
-        plt.style.use(plt_style)
+        plt.style.use(style)
         fig, ax = plt.subplots(1, 1, figsize=figsize)
         p1 = ax.plot(self.tss, self.Ptl, label="Total")
         p2 = ax.plot(self.tss, self.Pcl, label="Charging")
@@ -605,18 +635,20 @@ class ev_ssm():
         else:
             for t in tqdm(np.arange(self.ts+t_step, tf, t_step), desc=f'{self.name} MCS', disable=disable):
                 # --- update SSM A ---
+                Per =0
                 if self.n_step % self.Np == 0:
                     if is_updateA:
                         self.g_A(is_update=True)
                     if is_rstate:
                         self.r_state()
+                        Per = self.Prc - self.Pr  # error of AGC response
                     self.report(is_report=False)
 
                 self.ts = self.g_ts(t)
                 self.g_u()  # update online status
                 # TODO: add warning when Pi is 0
-                self.g_c(Pi=Pi, is_test=is_test)  # update control signal
-
+                self.g_c(Pi=Pi + Per, is_test=is_test)  # update control signal
+                Per = 0
                 # --- update soc interval and online status ---
                 # charging/discharging power, kW
                 self.ev['dP'] = self.ev[['Pc', 'Pd', 'nc', 'nd', 'c', 'u']].apply(
@@ -984,6 +1016,7 @@ class ev_ssm():
         iter = 0
         c0 = self.ev.c.copy()
         while (abs(error) >= 0.005) & (iter < 10):
+            error0 = error
             u, v, us, vs = self.g_agc(Pi_cap - self.Pr)
             self.ev.c = self.ev[['u', 'c', 'sx']].apply(lambda x: r_agc_sev(x, us, vs), axis=1)
             self.g_x()
@@ -997,6 +1030,8 @@ class ev_ssm():
             self.Pr += self.y - self.y0
             error = Pi_cap - self.Pr
             iter += 1
+            if abs(error0 - error) < 0.005:
+                break
         self.ev['agc'] = c0 - self.ev.c
         return u, v, us, vs
 
