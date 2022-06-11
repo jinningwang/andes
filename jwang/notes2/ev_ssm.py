@@ -247,6 +247,8 @@ class ev_ssm():
         self.Prl = [self.Pr]
         self.Prc = 0  # calculated response to AGC
         self.Prcl = [self.Prc]
+        self.Per = 0  # error of AGC power
+        self.Perl = [self.Per]
         self.y = self.ep()[0]
         self.yl = [self.y] # estiamted output power
 
@@ -638,21 +640,19 @@ class ev_ssm():
                 if abs(t - self.ts) < 1e-6:
                     continue
                 # --- update SSM A ---
-                Per = 0  # error of AGC power
                 if self.n_step % self.Np == 0:
                     if is_updateA:
                         self.g_A(is_update=True)
                     if is_rstate:
                         self.r_state()
-                        Per = self.Prc - self.Pr  # error of AGC response
-                        Per = 0  # turn off the error correction
+                        self.Per = self.Prc - self.Pr  # error of AGC response
+                        # self.Per = 0  # turn off the error correction
                     self.report(is_report=False)
 
                 self.ts = self.g_ts(t)
                 self.g_u()  # update online status
                 # TODO: add warning when Pi is 0
-                self.g_c(Pi=Pi + Per, is_test=is_test)  # update control signal
-                # Per = 0
+                self.g_c(Pi=Pi - self.Per, is_test=is_test)  # update control signal
                 # --- update soc interval and online status ---
                 # charging/discharging power, kW
                 self.ev['dP'] = self.ev[['Pc', 'Pd', 'nc', 'nd', 'c', 'u']].apply(
@@ -673,7 +673,8 @@ class ev_ssm():
                 self.report(is_report=False)
                 # Actual AGC response: AGC switched power if not modified
                 self.Prc += np.sum(self.ev.agc * self.ev.Pc * (1 - self.ev['mod'])) * 1e-3  # to MW
-                self.Prl.append(self.Pr - Per)
+                self.Prl.append(self.Pr + self.Per)
+                self.Perl.append(self.Per)
                 self.Prcl.append(self.Prc)
                 self.Ptl.append(self.Ptc)
                 self.Pcl.append(self.Pcc)
