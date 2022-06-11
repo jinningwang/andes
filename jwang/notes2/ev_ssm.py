@@ -20,21 +20,21 @@ def r_agc_sev(evs, us, vs):
       0,    1,    2
     """
     ctrl = evs[1]
-    if evs[0] == 1:  # online
-        if (evs[1] == 1) & (us[-1] == 1):  # response with us1, [C to I]
-            ctrl = np.random.choice(a=[0, 1], p=[us[evs[2]], 1-us[evs[2]]],
-                                    size=1, replace=True)[0]
-        elif (evs[1] == 0) & (us[-1] == -1):  # response with us-1 [I to C]
-            ctrl = np.random.choice(a=[1, 0], p=[us[evs[2]], 1-us[evs[2]]],
-                                    size=1, replace=True)[0]
+    if us[-1]*vs[-1] == 0:  # no AGC
+        ctrl = evs[1]
+    elif evs[0] == 1:  # online
         if (evs[1] == 0) & (vs[-1] == 1):  # response with vs1 [I to D]
             ctrl = np.random.choice(a=[-1, 0], p=[vs[evs[2]], 1-vs[evs[2]]],
                                     size=1, replace=True)[0]
-        elif (evs[1] == -1) & (vs[-1] == -1):  # response with vs-1 [D to I]
+        if (evs[1] == 1) & (us[-1] == 1):  # response with us1, [C to I]
+            ctrl = np.random.choice(a=[0, 1], p=[us[evs[2]], 1-us[evs[2]]],
+                                    size=1, replace=True)[0]
+        if (evs[1] == 0) & (us[-1] == -1):  # response with us-1 [I to C]
+            ctrl = np.random.choice(a=[1, 0], p=[us[evs[2]], 1-us[evs[2]]],
+                                    size=1, replace=True)[0]
+        if (evs[1] == -1) & (vs[-1] == -1):  # response with vs-1 [D to I]
             ctrl = np.random.choice(a=[0, -1], p=[vs[evs[2]], 1-vs[evs[2]]],
                                     size=1, replace=True)[0]
-    elif us[-1]*vs[-1] == 0:  # no AGC
-        ctrl = evs[1]
     elif evs[0] == 0:  # offline
         ctrl = 0
     return ctrl
@@ -379,8 +379,8 @@ class ev_ssm():
         ev_cols = ['u', 'u0',  'soc', 'bd', 'c', 'c2', 'c0', 'sx', 'dP', 'xl',
                    'soci', 'socd', 'Pc', 'Pd', 'nc', 'nd', 'Q', 'ts', 'tf']
         self.ev = self.ev[ev_cols]
-        self.ev['agc'] = 0  # `agc` is indicator of AGC response
-        self.ev['mod'] = 0  # `mod` is indicator of control modification
+        self.ev['agc'] = 0  # `agc` is indicator of participation of AGC
+        self.ev['mod'] = 0  # `mod` is indicator of modified of over or under charge
 
         self.g_BCD()
 
@@ -482,6 +482,7 @@ class ev_ssm():
         ax.set_title(f"AGC response")
         ax.set_xlim(self.tss[0], self.tss[-1])
         ax.grid()
+        ax.legend()
         return fig, ax
 
     def plot(self, figsize=(6, 3), style='default'):
@@ -633,15 +634,18 @@ class ev_ssm():
             logger.warning(f"{self.name}: end time {tf}[H] is too close to start time {self.ts}[H],"
                            "simulation will not start.")
         else:
-            for t in tqdm(np.arange(self.ts+t_step, tf, t_step), desc=f'{self.name} MCS', disable=disable):
+            for t in tqdm(np.arange(self.ts, tf, t_step), desc=f'{self.name} MCS', disable=disable):
+                if abs(t - self.ts) < 1e-6:
+                    continue
                 # --- update SSM A ---
-                Per =0
+                Per = 0  # error of AGC power
                 if self.n_step % self.Np == 0:
                     if is_updateA:
                         self.g_A(is_update=True)
                     if is_rstate:
                         self.r_state()
                         Per = self.Prc - self.Pr  # error of AGC response
+                        Per = 0  # turn off the error correction
                     self.report(is_report=False)
 
                 self.ts = self.g_ts(t)
@@ -667,7 +671,7 @@ class ev_ssm():
 
                 # record power
                 self.report(is_report=False)
-                # Actual response power only calculate AGC switched power
+                # Actual AGC response: AGC switched power if not modified
                 self.Prc += np.sum(self.ev.agc * self.ev.Pc * (1 - self.ev['mod'])) * 1e-3  # to MW
                 self.Prl.append(self.Pr - Per)
                 self.Prcl.append(self.Prc)
@@ -1027,12 +1031,14 @@ class ev_ssm():
             self.y = self.ep()[0]   # self.Pt
             # dx0 = np.matmul(self.B, u) + np.matmul(self.C, v)
             # self.Pr = np.matmul(self.D, dx0)[0]
-            self.Pr += self.y - self.y0
+            self.Pr += np.matmul(self.ne * self.D,
+                                 np.matmul(self.B, u) + np.matmul(self.C, v))[0]
             error = Pi_cap - self.Pr
             iter += 1
             if abs(error0 - error) < 0.005:
                 break
         self.ev['agc'] = c0 - self.ev.c
+        self.uv = [u, v, us, vs]
         return u, v, us, vs
 
     def g_agc(self, Pi):
@@ -1085,7 +1091,6 @@ class ev_ssm():
             # --- step III ---
             us[-1] = 1
             vs[-1] = 1
-            # --- step IV ---
 
         elif Pi <= -deadband:  # RegDn
             # --- step I ---
