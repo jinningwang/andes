@@ -648,7 +648,7 @@ class ev_ssm():
                 self.g_u()  # update online status
                 # TODO: add warning when Pi is 0
                 self.g_c(Pi=Pi + Per, is_test=is_test)  # update control signal
-                Per = 0
+                # Per = 0
                 # --- update soc interval and online status ---
                 # charging/discharging power, kW
                 self.ev['dP'] = self.ev[['Pc', 'Pd', 'nc', 'nd', 'c', 'u']].apply(
@@ -669,7 +669,7 @@ class ev_ssm():
                 self.report(is_report=False)
                 # Actual response power only calculate AGC switched power
                 self.Prc += np.sum(self.ev.agc * self.ev.Pc * (1 - self.ev['mod'])) * 1e-3  # to MW
-                self.Prl.append(self.Pr)
+                self.Prl.append(self.Pr - Per)
                 self.Prcl.append(self.Prc)
                 self.Ptl.append(self.Ptc)
                 self.Pcl.append(self.Pcc)
