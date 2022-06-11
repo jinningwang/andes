@@ -638,14 +638,14 @@ class ev_ssm():
                 if abs(t - self.ts) < 1e-6:
                     continue
                 # --- update SSM A ---
-                Per = 0
+                Per = 0  # error of AGC power
                 if self.n_step % self.Np == 0:
                     if is_updateA:
                         self.g_A(is_update=True)
                     if is_rstate:
                         self.r_state()
                         Per = self.Prc - self.Pr  # error of AGC response
-                        # Per = 0
+                        Per = 0  # turn off the error correction
                     self.report(is_report=False)
 
                 self.ts = self.g_ts(t)
