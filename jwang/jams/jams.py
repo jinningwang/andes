@@ -327,9 +327,11 @@ class dcopf(dcbase):
         for line in LINE:
             lhs[line] = sum(self.pg[gen] * self.gen_gsfdict[gen][line] for gen in GEN)
 
-        self.llu = self.mdl.addConstrs((lhs[line]+self.linedict[line]['sup'] <= self.linedict[line]['rate_a'] for line in LINE),
+        self.llu = self.mdl.addConstrs((lhs[line]+self.linedict[line]['sup'] <= self.linedict[line]['rate_a']
+                                        for line in LINE),
                                        name='llu')
-        self.lld = self.mdl.addConstrs((lhs[line]+self.linedict[line]['sup'] >= -self.linedict[line]['rate_a'] for line in LINE),
+        self.lld = self.mdl.addConstrs((lhs[line]+self.linedict[line]['sup'] >= -self.linedict[line]['rate_a']
+                                        for line in LINE),
                                        name='lld')
         return self.mdl
 
@@ -382,7 +384,7 @@ class dcopf(dcbase):
 
         self.data_check(skip_cost=False, info=True)
 
-        if self.mdl_m_FLAG == True:
+        if self.mdl_m_FLAG:
             self.mdl.solve()
             self.mdl_m_FLAG = False
 
@@ -590,9 +592,11 @@ class rted(dcopf):
         GEN = self.gendict.keys()
 
         # --- GEN capacity ---
-        self.pgmax = self.mdl.addConstrs((self.pg[gen] + self.pru[gen] <= self.gendict[gen]['pmax'] for gen in GEN),
+        self.pgmax = self.mdl.addConstrs((self.pg[gen] + self.pru[gen] <= self.gendict[gen]['pmax']
+                                          for gen in GEN),
                                          name='pgmax')
-        self.pgmin = self.mdl.addConstrs((self.pg[gen] - self.prd[gen] >= self.gendict[gen]['pmin'] for gen in GEN),
+        self.pgmin = self.mdl.addConstrs((self.pg[gen] - self.prd[gen] >= self.gendict[gen]['pmin']
+                                          for gen in GEN),
                                          name='pgmin')
 
         # --- SFR requirements ---
@@ -638,7 +642,7 @@ class rted(dcopf):
             rl = ['rampu', 'rampd']
         if disable_sfr:
             disable_list = [self.pgmax, self.pgmin, self.sfru, self.sfrd,
-                           self.rampu, self.rampd]
+                            self.rampu, self.rampd]
             rl = ['pgmax', 'pgmin', 'sfru', 'sfrd', 'rampu', 'rampd']
         if disable_sfr or disable_ramp:
             for c in disable_list:
@@ -806,26 +810,26 @@ class rted2(rted):
         gendict_I = dict()
         gendict_II = dict()
         for (new_key, new_value) in self.gendict.items():
-                if int(new_value['type']) == 1:
-                    gendict_I[new_key] = new_value
-                elif int(new_value['type']) == 2:
-                    gendict_II[new_key] = new_value
+            if int(new_value['type']) == 1:
+                gendict_I[new_key] = new_value
+            elif int(new_value['type']) == 2:
+                gendict_II[new_key] = new_value
         GENI = gendict_I.keys()
         GENII = gendict_II.keys()
         # --- a Type I GEN capacity limits ---
         pgmaxI = self.mdl.addConstrs((self.pg[gen] + self.pru[gen] <= self.gendict[gen]['pmax'] for gen in GENI),
-                    name='pgmax')
+                                     name='pgmax')
         pgminI = self.mdl.addConstrs((self.pg[gen] - self.prd[gen] >= self.gendict[gen]['pmin'] for gen in GENI),
-                    name='pgmin')
+                                     name='pgmin')
         # --- b Type II Gen capacity and SFR limits---
         pgmaxII = self.mdl.addConstrs((self.pg[gen] <= self.gendict[gen]['pmax'] for gen in GENII),
-                    name='pgmax')
+                                      name='pgmax')
         pgminII = self.mdl.addConstrs((self.pg[gen] >= self.gendict[gen]['pmin'] for gen in GENII),
-                    name='pgmin')
+                                      name='pgmin')
         self.prumax = self.mdl.addConstrs((self.pru[gen] <= self.gendict[gen]['prumax'] for gen in GENII),
-                    name='prumax')
+                                          name='prumax')
         self.prdmax = self.mdl.addConstrs((self.prd[gen] >= -1 * self.gendict[gen]['prdmax'] for gen in GENII),
-                    name='prdmax')
+                                          name='prdmax')
         self.pgmax = pgmaxI | pgmaxII
         self.pgmin = pgminI | pgminII
         return self.mdl
