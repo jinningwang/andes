@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 class dcbase:
     """
-    Base class of DC Optimal Power Flow.
+    Base class of DC optimal power flow.
 
     Attributes
     ----------
@@ -29,7 +29,7 @@ class dcbase:
 
     def __init__(self, name='system'):
         """
-        Base class of DC Optimal Power Flow.
+        Base class of DC optimal power flow.
 
         Parameters
         ----------
@@ -109,16 +109,15 @@ class dcbase:
         # --- load ---
         pq_cols = ['idx', 'u', 'name', 'bus', 'Vn', 'p0', 'q0',
                    'vmax', 'vmin', 'owner']
-        self.load = ssa.PQ.as_df()[pq_cols]
+        self.load = ssa.PQ.as_df()[pq_cols].reset_index(drop=True)
         self.load['sf'] = 1  # scaling factor
-        self.load.sort_values(by='idx', inplace=True)
+        self.load.sort_index(inplace=True)
 
         # --- line ---
         line_cols = ['idx', 'u', 'name', 'bus1', 'bus2', 'Sn', 'fn', 'Vn1', 'Vn2',
                      'trans', 'tap', 'phi', 'rate_a', 'rate_b', 'rate_c']
         ssa_line = ssa.Line.as_df()
         self.line = ssa_line[line_cols][ssa_line['trans'] == 0].reset_index(drop=True)
-        self.load.sort_values(by='idx', inplace=True)
         if self.line['rate_a'].max() == 0:
             self.line['rate_a'] = 2000 / self.mva
             self.line['rate_b'] = 2000 / self.mva
