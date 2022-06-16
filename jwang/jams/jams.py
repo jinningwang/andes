@@ -7,14 +7,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class system:
+class dcbase:
     """
-    Base class of jams system.
-
-    Parameters
-    ----------
-    name : str
-        Name of the system.
+    Base class of DC Optimal Power Flow.
 
     Attributes
     ----------
@@ -33,6 +28,14 @@ class system:
     """
 
     def __init__(self, name='system'):
+        """
+        Base class of DC Optimal Power Flow.
+
+        Parameters
+        ----------
+        name : str
+            Name of the system.
+        """
         self.name = name
 
     def update_dict(self, model=None):
@@ -45,10 +48,6 @@ class system:
             list of models that need to be updated.
             If None is given, update all models.
         """
-        # --- validity check ---
-        if not hasattr(self, 'cost'):
-            self._default_cost()
-
         # --- build dict ---
         if not model:
             mdl_list = ['bus', 'gen', 'line', 'gen_gsf', 'cost']
@@ -56,6 +55,14 @@ class system:
             mdl_list = model
         for mdl in mdl_list:
             mdl_df = getattr(self, mdl)
+            if mdl == 'line':
+                sup = pd.DataFrame()
+                sup['bus'] = self.bus['idx']
+                sup = sup.merge(self.load[['bus', 'p0', 'sf']],
+                                on='bus', how='left').fillna(0).rename(columns={'p0': 'load'})
+                sup['net'] = (-1 * sup.load * sup.sf)
+                sup2 = sup[['bus', 'net']].groupby('bus').sum()
+                mdl_df['sup'] = np.matmul(self.gsf_matrix, sup2.net.values)
             mdl_df.index = mdl_df.index
             setattr(self, mdl+'dict', mdl_df.T.to_dict())
 
@@ -70,7 +77,7 @@ class system:
 
         Notes
         -----
-        All generators are set as controllable.
+        All generators are set as controllable by default.
         """
         # --- base mva ---
         self.mva = ssa.config.mva
@@ -85,16 +92,17 @@ class system:
                     'pmax', 'pmin', 'v0']
         self.gen = build_group_table(ssa, 'StaticGen', stg_cols).reset_index(drop=True)
         self.gen['ctrl'] = 1
-        # TODO: later on, merge 'ramp_agc', 'ramp_10', 'ramp_30'
-        self.gen['ramp_agc'] = 100
+        # TODO: later on, merge 'ramp_5', 'ramp_10', 'ramp_30'
+        self.gen['ramp_5'] = 100
         self.gen['ramp_10'] = 100
         self.gen['ramp_30'] = 100
+        self.gen['sf'] = 1  # scaling factor
         # --- later on ---
-        # self.gen['ramp_agc'] = self.gen['ramp_agc'] / self.mva
+        # self.gen['ramp_5'] = self.gen['ramp_5'] / self.mva
         # self.gen['ramp_10'] = self.gen['ramp_10'] / self.mva
         # self.gen['ramp_30'] = self.gen['ramp_30'] / self.mva
-        # if self.gen['ramp_agc'].max() == 0:
-        #     self.gen['ramp_agc'] = 100
+        # if self.gen['ramp_5'].max() == 0:
+        #     self.gen['ramp_5'] = 100
         #     self.gen['ramp_10'] = 100
         #     self.gen['ramp_30'] = 100
 
@@ -102,6 +110,7 @@ class system:
         pq_cols = ['idx', 'u', 'name', 'bus', 'Vn', 'p0', 'q0',
                    'vmax', 'vmin', 'owner']
         self.load = ssa.PQ.as_df()[pq_cols]
+        self.load['sf'] = 1  # scaling factor
         self.load.sort_values(by='idx', inplace=True)
 
         # --- line ---
@@ -111,16 +120,13 @@ class system:
         self.line = ssa_line[line_cols][ssa_line['trans'] == 0].reset_index(drop=True)
         self.load.sort_values(by='idx', inplace=True)
         if self.line['rate_a'].max() == 0:
-            self.line['rate_a'] = 2000
-            self.line['rate_b'] = 2000
-            self.line['rate_c'] = 2000
-        self.line['rate_a'] = self.line['rate_a'] / self.mva
-        self.line['rate_b'] = self.line['rate_b'] / self.mva
-        self.line['rate_c'] = self.line['rate_c'] / self.mva
+            self.line['rate_a'] = 2000 / self.mva
+            self.line['rate_b'] = 2000 / self.mva
+            self.line['rate_c'] = 2000 / self.mva
 
         # --- GSF ---
         ssp = to_pandapower(ssa)
-        gsf_matrix = make_GSF(ssp)
+        gsf_matrix = make_GSF(ssp)  # TODO: remove dependency on pandapower
         self.gsf_matrix = gsf_matrix
         gsfdata = pd.DataFrame(gsf_matrix)
         gsfdata['line'] = self.line['idx']
@@ -139,7 +145,8 @@ class system:
         self.line['sup'] = np.matmul(gsf_matrix, sup2.net.values)
 
         # --- update dict ---
-        self.update_dict(model=None)
+        self.data_check(skip_cost=True)
+        self.update_dict(model=['bus', 'gen', 'line', 'gen_gsf'])
 
     def _default_cost(self):
         """
@@ -152,15 +159,39 @@ class system:
         self.cost['c0'] = 0
         self.cost['cr'] = 0
 
+    def data_check(self, skip_cost=False):
+        """
+        Check data consistency.
 
-class dcopf(system):
+        1. Check if scaling factors of gen and load are valid.
+        1. Check if gen upper and lower limits are valid.
+        1. Check if cost data exists, when set ``skip_cost=True``.
+
+        Parameters
+        ----------
+        skip_cost : bool
+            True to skip cost data check
+        """
+        if not self.gen.sf.between(left=0, right=1, inclusive='both').all():
+            logger.warning(f'{self.name} scaling factor of gen is out of range [0, 1]!')
+        if not self.load.sf.between(left=0, right=1, inclusive='both').all():
+            logger.warning(f'{self.name} scaling factor of load is out of range [0, 1]!')
+        equal = self.gen.pmin <= self.gen.pmax
+        if not equal.all():
+            logger.warning(f'{self.name} some gen pmin is larger than pmax!')
+
+        if not skip_cost:
+            if not hasattr(self, 'cost'):
+                self._default_cost()
+                logger.warning(f'{self.name} has no cost data, default cost data is set.')
+
+
+class dcopf(dcbase):
     """
-    DCOPF class.
+    DC optimal power flow.
 
-    Parameters
-    ----------
-    name : str
-        Name of the system.
+    In the modeling, power generation cost is minimized, s.t.:
+    power balance, line limits, and generator active power limits.
 
     Attributes
     ----------
@@ -178,19 +209,51 @@ class dcopf(system):
         Cost data.
     """
 
-    def __init__(self, name='dcopf'):
-        super().__init__(name)
-        self.mdl = gb.Model(name)
+    def __init__(self, name='DCOPF', OutputFlag=1):
+        """
+        DC Optimal Power Flow class.
 
-    def build(self):
+        Parameters
+        ----------
+        name : str
+            Name of the system.
+        OutputFlag : int
+            Output flag, 0 or 1.
+        """
+        super().__init__(name)
+        self.OutputFlag = OutputFlag
+        self.mdl = gb.Model(self.name)
+        self.mdl.setParam('OutputFlag', OutputFlag)
+        self.mdl_l_FLAG = False  # indicate if gb.model is loaded
+        self.mdl_m_FLAG = False  # indicate if gb.model is modified
+
+    def build(self, info=True):
+        """
+        Build DCOPF mpdel as attribute ``mdl``, will call `update_dict()` first.
+
+        After build, following attributes will be available:
+        `mdl`: model
+        `pg`: vars, power generation; named as ``pg``, indexed by `gen.idx`
+        `obj`: objective function, power generation cost;
+        `pb`: constraint, power balance; named as ``pb``
+        `llu`: constraints, line limit up; named as ``llu``, indexed by `line.idx`
+        `lld`: constraints, line limit down; named as ``lld``, indexed by `line.idx`
+        """
+        self.mdl = gb.Model(self.name)
+        self.mdl.setParam('OutputFlag', self.OutputFlag)
+        self.data_check(skip_cost=False)
         self.update_dict()
         # --- build DCOPF model ---
-        self.mdl = self._build_vars(self.mdl)
-        self.mdl = self._build_obj(self.mdl)
-        self.mdl = self._build_cons(self.mdl)
-        logger.warning('Successfully build DCOPF model.')
+        self.build_vars()
+        self.build_obj()
+        self.build_cons()
+        self.mdl_l_FLAG = True
+        if info: logger.warning(f'{self.name} GB model is loaded.')
 
-    def _build_vars(self, mdl):
+    def build_vars(self):
+        """
+        Build gurobi vars as attribtue ``pg``.
+        """
         GEN = self.gendict.keys()
         # --- uncontrollable generators limit to p0 ---
         gencp = self.gen.copy()
@@ -200,81 +263,151 @@ class dcopf(system):
         gencp['pmax'][gencp.u == 0] = 0
         gencp['pmin'][gencp.u == 0] = 0
         # --- gen: pg ---
-        self.pg = mdl.addVars(GEN, name='pg', vtype=gb.GRB.CONTINUOUS, obj=0,
+        self.pg = self.mdl.addVars(GEN, name='pg', vtype=gb.GRB.CONTINUOUS, obj=0,
                               ub=gencp.pmax.tolist(), lb=gencp.pmin.tolist())
-        return mdl
+        return self.pg
 
-    def _build_obj(self, mdl):
+    def build_obj(self):
+        """
+        Build gurobi objective as attribtue ``obj``.
+        """
         GEN = self.gendict.keys()
-        gendict = self.gendict
-        costdict = self.costdict
         # --- minimize generation cost ---
-        cost_pg = sum(self.pg[gen] * costdict[gen]['c1']
-                      + self.pg[gen] * self.pg[gen] * costdict[gen]['c2']
-                      + costdict[gen]['c0'] * gendict[gen]['u']  # online status
+        cost_pg = sum(self.pg[gen] * self.costdict[gen]['c1']
+                      + self.pg[gen] * self.pg[gen] * self.costdict[gen]['c2']
+                      + self.costdict[gen]['c0'] * self.gendict[gen]['u']  # online status
                       for gen in GEN)
-        self.obj = mdl.setObjective(expr=cost_pg, sense=gb.GRB.MINIMIZE)
-        return mdl
+        self.obj = self.mdl.setObjective(expr=cost_pg, sense=gb.GRB.MINIMIZE)
+        return [self.obj, cost_pg]
 
-    def _build_cons(self, mdl):
-        ptotal = self.load.p0.sum()
+    def build_cons(self):
+        """
+        Build gurobi constraints as attribtues ``pb``, ``llu```, and ``lld``.
+        """
+        ptotal = self.load.p0 * self.load.sf
+        ptotal = np.sum(ptotal)
 
-        gendict = self.gendict
-        linedict = self.linedict
-        gen_gsfdict = self.gen_gsfdict
-
-        GEN = gendict.keys()
-        LINE = linedict.keys()
+        GEN = self.gendict.keys()
+        LINE = self.linedict.keys()
 
         # --- power balance ---
-        p_sum = sum(self.pg[gen] for gen in GEN)
-        mdl.addConstr(p_sum == ptotal, name='PowerBalance')
+        p_sum = sum(self.pg[gen] * self.gendict[gen]['sf'] for gen in GEN)
+        self.pb = self.mdl.addConstr(p_sum == ptotal, name='pb')
 
         # --- line limits ---
+        lhs = {}
         for line in LINE:
-            lhs1 = sum(self.pg[gen] * gen_gsfdict[gen][line] for gen in GEN)
-            mdl.addConstr(lhs1+linedict[line]['sup'] <= linedict[line]['rate_a'], name=f'{line}_U')
-            mdl.addConstr(lhs1+linedict[line]['sup'] >= -linedict[line]['rate_a'], name=f'{line}_D')
-        return mdl
+            lhs[line] = sum(self.pg[gen] * self.gen_gsfdict[gen][line] for gen in GEN)
 
-    def get_res(self):
+        self.llu = self.mdl.addConstrs((lhs[line]+self.linedict[line]['sup'] <= self.linedict[line]['rate_a'] for line in LINE),
+                                  name='llu')
+        self.lld = self.mdl.addConstrs((lhs[line]+self.linedict[line]['sup'] >= -self.linedict[line]['rate_a'] for line in LINE),
+                                  name='lld')
+        return self.mdl
+
+    def solve(self, info=True):
         """
-        Get resutlts, can be used after mdl.optimize().
+        Build and solve the model, will call "build()" first.
 
         Returns
         -------
-        DataFrame
+        self.res: DataFrame
             The output DataFrame contains setpoints ``pg``
         """
 
-        # --- check if mdl is sovled ---
-        if not hasattr(self.pg[self.gen.idx[0]], 'X'):
-            logger.warning('DCOPF has no valid resutls!')
-            pg = [0] * self.gen.shape[0]
-        else:
-            # --- gather data --
+        pg = [0] * self.gen.shape[0]
+        self.build()
+        self.mdl.optimize()
+        if self.mdl.Status == gb.GRB.OPTIMAL:
+            if info: logger.warning(f'{self.name} is solved.')
             pg = []
             for gen in self.gendict.keys():
                 pg.append(self.pg[gen].X)
             # --- cost ---
             total_cost = self.mdl.getObjective().getValue()
-            logger.info(f'Total cost={np.round(total_cost, 3)}')
+            if info: logger.info(f'Total cost={np.round(total_cost, 3)}')
+        else:
+            if info: logger.warning(f'{self.name} solved to {self.mdl.Status}, please check.')
+            pg = [0] * self.gen.shape[0]
         # --- build output table ---
-        dcres = pd.DataFrame()
-        dcres['gen'] = self.gen['idx']
-        dcres['pg'] = pg
-        dcres.fillna(0, inplace=True)
-        return dcres
+        self.res = pd.DataFrame()
+        self.res['gen'] = self.gen['idx']
+        self.res['pg'] = pg
+        self.res.fillna(0, inplace=True)
+        return self.res
+
+    def diagnostic(self):
+        """
+        Diagnostic of the model.
+        """
+        logger.warning(f'{self.name} diagnostic process:')
+
+        if self.mdl_m_FLAG == True:
+            self.mdl.solve()
+            self.mdl_m_FLAG = False
+
+        if self.mdl.Status == gb.GRB.INFEASIBLE:
+            logger.warning(f'{self.name} is infeasible.')
+
+        # --- load analysis ---
+        pg = self.gen.pmax.sum()
+        pl = self.load.p0.sum()
+        ol = (pl-pg)/pg
+        if pg < pl:
+            logger.warning(f'Overload by {np.round(ol*100, 2)}%.')
+            sf = np.floor(pg /pl * 100) / 100
+            self.load.sf = sf
+            self.update_dict()
+            self.build(info=False)
+            self.solve(info=False)
+            self.mdl_m_FLAG = True
+            if self.mdl.Status == gb.GRB.OPTIMAL:
+                logger.warning(f'Scale load to {sf*100}% CAN address it.')
+            else:
+                logger.warning(f'Scale load to {sf*100}% CANNOT address it.')
+
+            # reset load
+            self.load.sf = 1
+            self.update_dict()
+            self.build(info=False)
+            self.mdl.optimize()
+            self.mdl_m_FLAG = False
+        
+        # --- IIS ---
+        self.mdl.computeIIS()
+        c = self.mdl.getConstrs()
+        susp_c_idx = [i for i, e in enumerate(self.mdl.IISConstr) if e != 0]
+        susp_c = []
+        for i in susp_c_idx:
+            susp_c.append(c[i])
+
+        vars = self.mdl.getVars()
+        susp_vl_idx = [i for i, e in enumerate(self.mdl.IISLB) if e != 0]
+        susp_vl = []
+        for i in susp_vl_idx:
+            susp_vl.append(vars[i])
+
+        susp_vu_idx = [i for i, e in enumerate(self.mdl.IISUB) if e != 0]
+        susp_vu = []
+        for i in susp_vu_idx:
+            susp_vu.append(vars[i])
+        
+        if len(susp_c) > 0:
+            logger.warning(f'{self.name} IISConstrs: {susp_c}')
+        if len(susp_vl) > 0:
+            logger.warning(f'{self.name} IISLB: {susp_vl}')
+        if len(susp_vu) > 0:
+            logger.warning(f'{self.name} IISUB: {susp_vu}')
+        return True
 
 
 class rted(dcopf):
     """
-    RTED class.
+    Real-time economic dispatch (RTED) using DCOPF.
 
-    Parameters
-    ----------
-    name : str
-        Name of the system.
+    In the modeling, cost of generation and SFR are minimized, s.t.:
+    power balance, line limits, generator active power limits,
+    and ramping limits.
 
     Attributes
     ----------
@@ -292,140 +425,195 @@ class rted(dcopf):
         Cost data.
     """
 
-    def __init__(self, name='rted'):
+    def __init__(self, name='RTED'):
+        """
+        Real-time economic dispatch (RTED) using DCOPF.
+
+        Parameters
+        ----------
+        name : str
+            Name of the system.
+        """
         super().__init__(name)
         # self.build()
 
     def from_andes(self, ssa):
         super().from_andes(ssa)
-        dcm = dcopf()
-        dcm.from_andes(ssa)
-        dcm.build()
-        dcm.mdl.optimize()
-        self.gen['p_pre'] = dcm.get_res()['pg']
+        self.gen['p_pre'] = 0
+        self.update_dict(model=['gen'])
 
-    def def_sfr(self, du, dd):
+    def def_sfr(self, sfrur, sfrdr):
         """
-        Define the SFR requirements.
+        Define the SFR requirements as attribtues ``sfrur``, ``sfrdr``.
 
         Parameters
         ----------
-        du : float
+        sfru : float
             SFR Up requirement.
-        dd: float
+        sfrd: float
             SFR Down requirement.
         """
-        self.du = du
-        self.dd = dd
+        self.sfrur = sfrur
+        self.sfrdr = sfrdr
 
-    def data_check(self):
+    def data_check(self, skip_cost=False):
         """
         Check data consistency.
+
+        1. Check if scaling factors of gen and load are valid.
+        1. Check if gen upper and lower limits are valid.
+        1. Check if cost data exists, when set ``skip_cost=True``.
+        1. Check if cost data has cru, crd
+        1. Check if SFR requirements data ``sfrur``, ``sfrdr`` exist.
+        1. Check if gen data has ``ramp_5``.
+
+        Parameters
+        ----------
+        skip_cost : bool
+            True to skip cost data check
         """
-        if not hasattr(self.cost, 'cru'):
-            self.cost['cru'] = 0
-            logger.warning('No RegUp cost data (``cru`` in ``cost``), set to 0.')
-        if not hasattr(self.cost, 'crd'):
-            self.cost['crd'] = 0
-            logger.warning('No RegDn cost data(``crd`` in ``cost``), set to 0.')
-        if not hasattr(self, 'du'):
-            self.du = 0
-            logger.warning('No RegUp requirement data (``du``), set to 0.')
-        if not hasattr(self, 'dd'):
-            self.dd = 0
-            logger.warning('No RegDn requirement data (``dd``), set to 0.')
-        if not hasattr(self.gen, 'ramp_agc'):
-            self.gen['ramp_agc'] = 20
-            logger.warning('No ramp AGC data (``ramp_agc`` in ``gen``), set to 20.')
+        super().data_check(skip_cost=skip_cost)
+        if not skip_cost:
+            if not hasattr(self.cost, 'cru'):
+                self.cost['cru'] = 0
+                logger.warning('No RegUp cost data (``cru`` in ``cost``), set to 0.')
+            if not hasattr(self.cost, 'crd'):
+                self.cost['crd'] = 0
+                logger.warning('No RegDn cost data(``crd`` in ``cost``), set to 0.')
+            if not hasattr(self, 'sfrur'):
+                self.sfrur = 0
+                logger.warning('No RegUp requirement data (``sfru``), set to 0.')
+            if not hasattr(self, 'sfrdr'):
+                self.sfrdr = 0
+                logger.warning('No RegDn requirement data (``sfrd``), set to 0.')
+            if not hasattr(self.gen, 'ramp_5'):
+                self.gen['ramp_5'] = 100
+                logger.warning('No ``ramp_5`` in ``gen``, set to 100.')
 
     def build(self):
         """
-        Build gurobipy model.
+        Build RTED model as the attribute ``mdl``, will call `update_dict()` first.
 
-        Returns
-        -------
-        mdl : gurobipy.Model
-            The gurobipy model.
+        After build, following attributes will be available:
+        `mdl`: model
+        `pg`: vars, power generation; named as ``pg``, indexed by `gen.idx`
+        `pru`: vars, RegUp power; named as ``pru``, indexed by `gen.idx`
+        `prd``: vars, RegUp power; named as ``prd``, indexed by `gen.idx`
+        `obj`: objective function, power generation cost;
+        `pb`: constraint, power balance; named as ``pb``
+        `llu`: constraints, line limit up; named as ``llu``, indexed by `line.idx`
+        `lld`: constraints, line limit down; named as ``lld``, indexed by `line.idx`
+        `pgmax`: constraints, generator limit up; named as ``pgmax``, indexed by `gen.idx`
+        `pgmin`: constraints, generator limit down; named as ``pgmin``, indexed by `gen.idx`
+        `sfru`: constraint, SFR up; named as ``sfru``
+        `sfrd`: constraint, SFR down; named as ``sfrd``
+        `rampu`: constraints, ramping limit up; named as ``rampu``, indexed by `gen.idx`
+        `rampd`: constraints, ramping limit down; named as ``rampd``, indexed by `gen.idx`
         """
-        self.data_check()
-
-        # --- build RTED model ---
+        self.data_check(skip_cost=False)
         self.update_dict()
-        self.mdl = self._build_vars(self.mdl)
-        self.mdl = self._build_obj(self.mdl)
-        self.mdl = self._build_cons(self.mdl)
-        logger.info('Successfully build RTED model.')
+        # --- build RTED model ---
+        self.build_vars()
+        self.build_obj()
+        self.build_cons()
+        self.mdl_l_FLAG = True
+        logger.warning(f'{self.name} GB model is loaded.')
 
-    def _build_vars(self, mdl):
+    def build_vars(self):
+        """
+        Build gurobi vars as attribtues ``pg``, ``pru``, and ``prd``.
+        """
+        super().build_vars()
         GEN = self.gendict.keys()
-        # --- uncontrollable generators limit to p0 ---
-        gencp = self.gen.copy()
-        gencp['pmax'][gencp.ctrl == 0] = gencp['p0'][gencp.ctrl == 0]
-        gencp['pmin'][gencp.ctrl == 0] = gencp['p0'][gencp.ctrl == 0]
-        # --- offline geenrators limit to 0 ---
-        gencp['pmax'][gencp.u == 0] = 0
-        gencp['pmin'][gencp.u == 0] = 0
-        # --- gen: pg ---
-        self.pg = mdl.addVars(GEN, name='pg', vtype=gb.GRB.CONTINUOUS, obj=0,
-                              ub=gencp.pmax.tolist(), lb=gencp.pmin.tolist())
         # --- RegUp, RegDn ---
-        self.pru = mdl.addVars(GEN, name='pru', vtype=gb.GRB.CONTINUOUS, obj=0)
-        self.prd = mdl.addVars(GEN, name='prd', vtype=gb.GRB.CONTINUOUS, obj=0)
-        return mdl
+        self.pru = self.mdl.addVars(GEN, name='pru', vtype=gb.GRB.CONTINUOUS, obj=0)
+        self.prd = self.mdl.addVars(GEN, name='prd', vtype=gb.GRB.CONTINUOUS, obj=0)
+        return [self.pg, self.pru, self.prd]
 
-    def _build_obj(self, mdl):
+    def build_obj(self):
+        """
+        Build gurobi objective as attribtue ``obj``.
+        """
         GEN = self.gendict.keys()
-        gendict = self.gendict
-        costdict = self.costdict
-        # --- minimize generation cost ---
-        cost_pg = sum(self.pg[gen] * costdict[gen]['c1']
-                      + self.pg[gen] * self.pg[gen] * costdict[gen]['c2']
-                      + costdict[gen]['c0'] * gendict[gen]['u']  # online status
-                      for gen in GEN)
+        [_, cost_pg] = super().build_obj()
         # --- RegUp, RegDn cost ---
-        cost_ru = sum(self.pru[gen] * costdict[gen]['cru'] for gen in GEN)
-        cost_rd = sum(self.pru[gen] * costdict[gen]['crd'] for gen in GEN)
-        self.obj = mdl.setObjective(expr=cost_pg + cost_ru + cost_rd, sense=gb.GRB.MINIMIZE)
-        return mdl
+        cost_ru = sum(self.pru[gen] * self.costdict[gen]['cru'] for gen in GEN)
+        cost_rd = sum(self.pru[gen] * self.costdict[gen]['crd'] for gen in GEN)
+        self.obj = self.mdl.setObjective(expr=cost_pg + cost_ru + cost_rd,
+                                         sense=gb.GRB.MINIMIZE)
+        return [self.obj, cost_pg, cost_ru, cost_rd]
 
-    def _build_cons(self, mdl):
-        ptotal = self.load.p0.sum()
-
-        gendict = self.gendict
-        linedict = self.linedict
-        gen_gsfdict = self.gen_gsfdict
-
-        GEN = gendict.keys()
-        LINE = linedict.keys()
-
-        # --- power balance ---
-        p_sum = sum(self.pg[gen] for gen in GEN)
-        mdl.addConstr(p_sum == ptotal, name='PowerBalance')
-
-        # --- line limits ---
-        for line in LINE:
-            lhs1 = sum(self.pg[gen] * gen_gsfdict[gen][line] for gen in GEN)
-            mdl.addConstr(lhs1+linedict[line]['sup'] <= linedict[line]['rate_a'], name=f'{line}_U')
-            mdl.addConstr(lhs1+linedict[line]['sup'] >= -linedict[line]['rate_a'], name=f'{line}_D')
+    def build_cons(self):
+        """
+        Build gurobi constraints as attribtues ``pb``, ``llu```, ``lld``, ``pgmax``,
+        ``pgmin``, ``sfru``, ``sfrd``, ``rampu``, and ``rampd``.
+        """
+        super().build_cons()
+        GEN = self.gendict.keys()
 
         # --- GEN capacity ---
-        mdl.addConstrs((self.pg[gen] + self.pru[gen] <= gendict[gen]['pmax'] for gen in GEN),
-                       name='PG_max')
-        mdl.addConstrs((self.pg[gen] - self.prd[gen] >= gendict[gen]['pmin'] for gen in GEN),
-                       name='PG_mim')
+        self.pgmax = self.mdl.addConstrs((self.pg[gen] + self.pru[gen] <= self.gendict[gen]['pmax'] for gen in GEN),
+                       name='pgmax')
+        self.pgmin = self.mdl.addConstrs((self.pg[gen] - self.prd[gen] >= self.gendict[gen]['pmin'] for gen in GEN),
+                       name='pgmin')
 
         # --- SFR requirements ---
         # --- a) RegUp --
-        mdl.addConstr(sum(self.pru[gen] for gen in GEN) == self.du, name='RegUp')
+        self.sfru = self.mdl.addConstr(sum(self.pru[gen] for gen in GEN) == self.sfrur, name='sfru')
         # --- b) RegDn --
-        mdl.addConstr(sum(self.prd[gen] for gen in GEN) == self.dd, name='RegDn')
+        self.sfrd = self.mdl.addConstr(sum(self.prd[gen] for gen in GEN) == self.sfrdr, name='sfrd')
 
-        # --- AGC ramp limits ---
-        mdl.addConstrs((self.pg[gen] - gendict[gen]['p_pre'] <= gendict[gen]['ramp_agc']
-                       for gen in GEN), name='RampU')
-        mdl.addConstrs((gendict[gen]['p_pre'] - self.pg[gen] <= gendict[gen]['ramp_agc']
-                       for gen in GEN), name='RampD')
-        return mdl
+        # --- ramp limits ---
+        self.rampu = self.mdl.addConstrs((self.pg[gen] - self.gendict[gen]['p_pre'] <= self.gendict[gen]['ramp_5']
+                       for gen in GEN), name='rampu')
+        self.rampd = self.mdl.addConstrs((self.gendict[gen]['p_pre'] - self.pg[gen] <= self.gendict[gen]['ramp_5']
+                       for gen in GEN), name='rampd')
+        return self.mdl
+
+    def solve(self, info=True):
+        """
+        Build and solve the model, will call "build()" first.
+
+        Returns
+        -------
+        self.res: DataFrame
+            The output DataFrame contains setpoints ``pg``,
+            RegUp power ``pru``, RegDn power ``prd``,
+            RegUp factor ``bu``, and RegDn factor ``bd``.
+        """
+
+        pg = [0] * self.gen.shape[0]
+        pru = [0] * self.gen.shape[0]
+        prd = [0] * self.gen.shape[0]
+        self.build()
+        self.mdl.optimize()
+        if self.mdl.Status == gb.GRB.OPTIMAL:
+            if info: logger.warning(f'{self.name} is solved.')
+            pg = []
+            pru = []
+            prd = []
+            for gen in self.gendict.keys():
+                pg.append(self.pg[gen].X)
+                pru.append(self.pru[gen].X)
+                prd.append(self.prd[gen].X)
+            # --- cost ---
+            total_cost = self.mdl.getObjective().getValue()
+            if info: logger.info(f'Total cost={np.round(total_cost, 3)}')
+        else:
+            if info: logger.warning('Optimization ended with status %d' % self.mdl.Status)
+            pg = [0] * self.gen.shape[0]
+            pru = [0] * self.gen.shape[0]
+            prd = [0] * self.gen.shape[0]
+        # --- build output table ---
+        self.res = pd.DataFrame()
+        self.res['gen'] = self.gen['idx']
+        self.res['pg'] = pg
+        self.res['pru'] = pru
+        self.res['prd'] = prd
+        self.res['bu'] = self.res['pru'] / self.res['pru'].sum()
+        self.res['bd'] = self.res['prd'] / self.res['prd'].sum()
+        self.res.fillna(0, inplace=True)
+        return self.res
 
 
 class rted2(rted):
@@ -549,8 +737,8 @@ class rted2(rted):
         mdl.addConstr(sum(self.prd[gen] for gen in GEN) == self.dd, name='RegDn')
 
         # --- AGC ramp limits ---
-        mdl.addConstrs((self.pg[gen] - gendict[gen]['p_pre'] <= gendict[gen]['ramp_agc']
+        mdl.addConstrs((self.pg[gen] - gendict[gen]['p_pre'] <= gendict[gen]['ramp_5']
                        for gen in GEN), name='RampU')
-        mdl.addConstrs((gendict[gen]['p_pre'] - self.pg[gen] <= gendict[gen]['ramp_agc']
+        mdl.addConstrs((gendict[gen]['p_pre'] - self.pg[gen] <= gendict[gen]['ramp_5']
                        for gen in GEN), name='RampD')
         return mdl
