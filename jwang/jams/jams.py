@@ -63,7 +63,7 @@ class dcbase:
                 sup['net'] = (-1 * sup.load * sup.sf)
                 sup2 = sup[['bus', 'net']].groupby('bus').sum()
                 mdl_df['sup'] = np.matmul(self.gsf_matrix, sup2.net.values)
-            mdl_df.index = mdl_df.index
+            mdl_df.index = mdl_df.idx
             setattr(self, mdl+'dict', mdl_df.T.to_dict())
 
     def from_andes(self, ssa):
@@ -127,12 +127,14 @@ class dcbase:
         ssp = to_pandapower(ssa)
         gsf_matrix = make_GSF(ssp)  # TODO: remove dependency on pandapower
         self.gsf_matrix = gsf_matrix
-        gsfdata = pd.DataFrame(gsf_matrix)
-        gsfdata['line'] = self.line['idx']
+        gsfdata = pd.DataFrame(data=self.gsf_matrix,
+                            columns=self.bus['idx'].values,
+                            index=self.line['idx'].values)
         gsfT = gsfdata.T
-        gsfT['bus'] = self.bus['idx']
+        gsfT['bus'] = gsfT.index
+        # gsfT['bus'] = self.bus['idx']
         self.gen_gsf = self.gen[['idx', 'name', 'bus']].merge(gsfT, on='bus', how='left')
-        self.gen_gsf.sort_values(by='idx', inplace=True)
+        self.gen_gsf.index = self.gen_gsf['idx']
 
         # add power surplus, where the controlled gen is removed
         sup = pd.DataFrame()
@@ -145,7 +147,7 @@ class dcbase:
 
         # --- update dict ---
         self.data_check(skip_cost=True)
-        self.update_dict(model=['bus', 'gen', 'line', 'gen_gsf'])
+        self.update_dict(model=['bus', 'gen', 'line', 'load', 'gen_gsf'])
 
     def _default_cost(self):
         """
@@ -158,7 +160,26 @@ class dcbase:
         self.cost['c0'] = 0
         self.cost['cr'] = 0
 
-    def data_check(self, skip_cost=False):
+    def _data_complete(self, obj, attr, df=False):
+        """
+        Fill missing data.
+
+        Parameters
+        ----------
+        obj : str
+            Object name.
+
+
+        
+        """
+
+        if not hasattr(obj, attr):
+            if df:
+                df = getattr(obj, attr)
+
+
+
+    def data_check(self, skip_cost=False, info=True):
         """
         Check data consistency.
 
@@ -171,19 +192,24 @@ class dcbase:
         skip_cost : bool
             True to skip cost data check
         """
+        warning_list = []
+        absent_list = []
         if not self.gen.sf.between(left=0, right=1, inclusive='both').all():
-            logger.warning(f'{self.name} scaling factor of gen is out of range [0, 1]!')
+            warning_list.append(['sf of gen'])
         if not self.load.sf.between(left=0, right=1, inclusive='both').all():
-            logger.warning(f'{self.name} scaling factor of load is out of range [0, 1]!')
+            warning_list.append(['sf of load'])
         equal = self.gen.pmin <= self.gen.pmax
         if not equal.all():
-            logger.warning(f'{self.name} some gen pmin is larger than pmax!')
+            warning_list.append(['pmax and pmin of gen'])
 
         if not skip_cost:
             if not hasattr(self, 'cost'):
                 self._default_cost()
-                logger.warning(f'{self.name} has no cost data, default cost data is set.')
-
+                absent_list.append('cost')
+        if info:
+            if len(warning_list) > 1: logger.warning(f'Suspected data: {warning_list}')
+            if len(absent_list) > 1: logger.warning(f'Absent data: {absent_list}')
+        return [warning_list, absent_list]
 
 class dcopf(dcbase):
     """
@@ -240,7 +266,7 @@ class dcopf(dcbase):
         """
         self.mdl = gb.Model(self.name)
         self.mdl.setParam('OutputFlag', self.OutputFlag)
-        self.data_check(skip_cost=False)
+        self.data_check(skip_cost=False, info=info)
         self.update_dict()
         # --- build DCOPF model ---
         self.build_vars()
@@ -324,13 +350,13 @@ class dcopf(dcbase):
                 pg.append(self.pg[gen].X)
             # --- cost ---
             total_cost = self.mdl.getObjective().getValue()
-            if info: logger.info(f'Total cost={np.round(total_cost, 3)}')
+            logger.warning(f'{self.name}: total cost={np.round(total_cost, 3)}')
         else:
             if info: logger.warning(f'{self.name} solved to {self.mdl.Status}, please check.')
             pg = [0] * self.gen.shape[0]
         # --- build output table ---
         self.res = pd.DataFrame()
-        self.res['gen'] = self.gen['idx']
+        self.res['gen'] = self.gen['idx'].values
         self.res['pg'] = pg
         self.res.fillna(0, inplace=True)
         return self.res
@@ -340,6 +366,8 @@ class dcopf(dcbase):
         Diagnostic of the model.
         """
         logger.warning(f'{self.name} diagnostic process:')
+
+        self.data_check(skip_cost=False, info=True)
 
         if self.mdl_m_FLAG == True:
             self.mdl.solve()
@@ -424,7 +452,7 @@ class rted(dcopf):
         Cost data.
     """
 
-    def __init__(self, name='RTED'):
+    def __init__(self, name='RTED', OutputFlag=1):
         """
         Real-time economic dispatch (RTED) using DCOPF.
 
@@ -433,8 +461,7 @@ class rted(dcopf):
         name : str
             Name of the system.
         """
-        super().__init__(name)
-        # self.build()
+        super().__init__(name=name, OutputFlag=OutputFlag)
 
     def from_andes(self, ssa):
         super().from_andes(ssa)
@@ -455,7 +482,7 @@ class rted(dcopf):
         self.sfrur = sfrur
         self.sfrdr = sfrdr
 
-    def data_check(self, skip_cost=False):
+    def data_check(self, skip_cost=False, info=True):
         """
         Check data consistency.
 
@@ -471,17 +498,17 @@ class rted(dcopf):
         skip_cost : bool
             True to skip cost data check
         """
-        super().data_check(skip_cost=skip_cost)
+        [warning_list, absent_list] = super().data_check(skip_cost=skip_cost, info=False)
         if not skip_cost:
             if not hasattr(self.cost, 'cru'):
                 self.cost['cru'] = 0
-                logger.warning('No RegUp cost data (``cru`` in ``cost``), set to 0.')
+                absent_list.append('cost.cru')
             if not hasattr(self.cost, 'crd'):
                 self.cost['crd'] = 0
-                logger.warning('No RegDn cost data(``crd`` in ``cost``), set to 0.')
+                absent_list.append('cost.crd')
             if not hasattr(self, 'sfrur'):
                 self.sfrur = 0
-                logger.warning('No RegUp requirement data (``sfru``), set to 0.')
+                absent_list.append('cost.sfrur')
             if not hasattr(self, 'sfrdr'):
                 self.sfrdr = 0
                 logger.warning('No RegDn requirement data (``sfrd``), set to 0.')
@@ -489,7 +516,7 @@ class rted(dcopf):
                 self.gen['ramp_5'] = 100
                 logger.warning('No ``ramp_5`` in ``gen``, set to 100.')
 
-    def build(self):
+    def build(self, info=True):
         """
         Build RTED model as the attribute ``mdl``, will call `update_dict()` first.
 
@@ -509,14 +536,7 @@ class rted(dcopf):
         `rampu`: constraints, ramping limit up; named as ``rampu``, indexed by `gen.idx`
         `rampd`: constraints, ramping limit down; named as ``rampd``, indexed by `gen.idx`
         """
-        self.data_check(skip_cost=False)
-        self.update_dict()
-        # --- build RTED model ---
-        self.build_vars()
-        self.build_obj()
-        self.build_cons()
-        self.mdl_l_FLAG = True
-        logger.warning(f'{self.name} GB model is loaded.')
+        super().build(info=info)
 
     def build_vars(self):
         """
@@ -575,7 +595,7 @@ class rted(dcopf):
 
         Returns
         -------
-        self.res: DataFrame
+        res: DataFrame
             The output DataFrame contains setpoints ``pg``,
             RegUp power ``pru``, RegDn power ``prd``,
             RegUp factor ``bu``, and RegDn factor ``bd``.
@@ -597,7 +617,7 @@ class rted(dcopf):
                 prd.append(self.prd[gen].X)
             # --- cost ---
             total_cost = self.mdl.getObjective().getValue()
-            if info: logger.info(f'Total cost={np.round(total_cost, 3)}')
+            logger.warning(f'{self.name}: total cost={np.round(total_cost, 3)}')
         else:
             if info: logger.warning('Optimization ended with status %d' % self.mdl.Status)
             pg = [0] * self.gen.shape[0]
@@ -605,7 +625,7 @@ class rted(dcopf):
             prd = [0] * self.gen.shape[0]
         # --- build output table ---
         self.res = pd.DataFrame()
-        self.res['gen'] = self.gen['idx']
+        self.res['gen'] = self.gen['idx'].values
         self.res['pg'] = pg
         self.res['pru'] = pru
         self.res['prd'] = prd
@@ -617,12 +637,12 @@ class rted(dcopf):
 
 class rted2(rted):
     """
-    RTED2 class, where type II generator is supported.
+    Real-time economic dispatch (RTED) using DCOPF,
+    where type2 generator is supported.
 
-    Parameters
-    ----------
-    name : str
-        Name of the system.
+    In the modeling, cost of generation and SFR are minimized, s.t.:
+    power balance, line limits, generator active power limits,
+    and ramping limits.
 
     Attributes
     ----------
@@ -640,18 +660,57 @@ class rted2(rted):
         Cost data.
     """
 
-    def __init__(self, name='rted'):
-        super().__init__(name)
-        # self.build()
+    def __init__(self, name='RTED', OutputFlag=1):
+        """
+        Real-time economic dispatch (RTED) using DCOPF,
+        where type2 generator is supported.
 
-    def data_check(self):
-        super().data_check()
-        if not hasattr(self.gen, 'type'):
-            self.gen['type'] = '1'
-        if not hasattr(self.gen, 'prumax'):
-            self.gen['prumax'] = 0
-        if not hasattr(self.gen, 'prdmax'):
-            self.gen['prdmax'] = 0
+        Parameters
+        ----------
+        name : str
+            Name of the system.
+        """
+        super().__init__(name=name, OutputFlag=OutputFlag)
+
+    def from_andes(self, ssa):
+        super().from_andes(ssa)
+        self.gen['type'] = '1'
+        self.gen['prumax'] = 0
+        self.gen['prdmax'] = 0
+        self.update_dict(model=['gen'])
+
+    def data_check(self, skip_cost=False, info=True):
+        """
+        Check data consistency.
+
+        1. Check if scaling factors of gen and load are valid.
+        1. Check if gen upper and lower limits are valid.
+        1. Check if cost data exists, when set ``skip_cost=True``.
+        1. Check if cost data has cru, crd
+        1. Check if SFR requirements data ``sfrur``, ``sfrdr`` exist.
+        1. Check if gen data has ``ramp_5``.
+        1. Check if gen data has ``type``, ``prumax``, ``prdmax``.
+
+        Parameters
+        ----------
+        skip_cost : bool
+            True to skip cost data check
+        """
+        [warning_list, absent_list] = super().data_check(skip_cost=skip_cost, info=False)
+        if not skip_cost:
+            if not hasattr(self.gen, 'type'):
+                self.gen['type'] = '1'
+                absent_list.append('gen.type')
+            if not hasattr(self.gen, 'prumax'):
+                self.gen['prumax'] = 0
+                absent_list.append('gen.prumax')
+            if not hasattr(self.gen, 'prdmax'):
+                self.gen['prdmax'] = 0
+                absent_list.append('gen.prdmax')
+        if info:
+            if len(warning_list) > 1: logger.warning(f'Suspected data: {warning_list}')
+            if len(absent_list) > 1: logger.warning(f'Absent data: {absent_list}')
+        return [warning_list, absent_list]
 
     def def_type2(self, gen_idx, prumax, prdmax):
         """
