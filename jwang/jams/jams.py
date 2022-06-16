@@ -260,11 +260,11 @@ class dcopf(dcbase):
 
         After build, following attributes will be available:
         `mdl`: model
-        `pg`: vars, power generation; named as ``pg``, indexed by `gen.idx`
-        `obj`: objective function, power generation cost;
-        `pb`: constraint, power balance; named as ``pb``
-        `llu`: constraints, line limit up; named as ``llu``, indexed by `line.idx`
-        `lld`: constraints, line limit down; named as ``lld``, indexed by `line.idx`
+        `pg`: Vars, power generation; named as ``pg``, indexed by `gen.idx`
+        `obj`: Obj function, power generation cost;
+        `pb`: Constr, power balance; named as ``pb``
+        `llu`: Constrs, line limit up; named as ``llu``, indexed by `line.idx`
+        `lld`: Constrs, line limit down; named as ``lld``, indexed by `line.idx`
         """
         self.mdl = gb.Model(self.name)
         self.mdl.setParam('OutputFlag', self.OutputFlag)
@@ -333,18 +333,26 @@ class dcopf(dcbase):
                                        name='lld')
         return self.mdl
 
-    def solve(self, info=True):
+    def solve(self, info=True, no_build=False):
         """
         Build and solve the model, will call "build()" first.
 
+        Parameters
+        ----------
+        info: bool
+            If True, will print out the solving information.
+        no_build: bool
+            If True, will not call ``build()`` and use existing ``mdl``.
+
         Returns
         -------
-        self.res: DataFrame
+        res: DataFrame
             The output DataFrame contains setpoints ``pg``
         """
 
         pg = [0] * self.gen.shape[0]
-        self.build()
+        if not no_build:
+            self.build(info=True)
         self.mdl.optimize()
         if self.mdl.Status == gb.GRB.OPTIMAL:
             if info:
@@ -533,19 +541,19 @@ class rted(dcopf):
 
         After build, following attributes will be available:
         `mdl`: model
-        `pg`: vars, power generation; named as ``pg``, indexed by `gen.idx`
-        `pru`: vars, RegUp power; named as ``pru``, indexed by `gen.idx`
-        `prd``: vars, RegUp power; named as ``prd``, indexed by `gen.idx`
-        `obj`: objective function, power generation cost;
-        `pb`: constraint, power balance; named as ``pb``
-        `llu`: constraints, line limit up; named as ``llu``, indexed by `line.idx`
-        `lld`: constraints, line limit down; named as ``lld``, indexed by `line.idx`
-        `pgmax`: constraints, generator limit up; named as ``pgmax``, indexed by `gen.idx`
-        `pgmin`: constraints, generator limit down; named as ``pgmin``, indexed by `gen.idx`
-        `sfru`: constraint, SFR up; named as ``sfru``
-        `sfrd`: constraint, SFR down; named as ``sfrd``
-        `rampu`: constraints, ramping limit up; named as ``rampu``, indexed by `gen.idx`
-        `rampd`: constraints, ramping limit down; named as ``rampd``, indexed by `gen.idx`
+        `pg`: Vars, power generation; named as ``pg``, indexed by `gen.idx`
+        `pru`: Vars, RegUp power; named as ``pru``, indexed by `gen.idx`
+        `prd``: Vars, RegUp power; named as ``prd``, indexed by `gen.idx`
+        `obj`: Obj function, power generation cost;
+        `pb`: Constr, power balance; named as ``pb``
+        `llu`: Constrs, line limit up; named as ``llu``, indexed by `line.idx`
+        `lld`: Constrs, line limit down; named as ``lld``, indexed by `line.idx`
+        `pgmax`: Constrs, generator limit up; named as ``pgmax``, indexed by `gen.idx`
+        `pgmin`: Constrs, generator limit down; named as ``pgmin``, indexed by `gen.idx`
+        `sfru`: Constr, SFR up; named as ``sfru``
+        `sfrd`: Constr, SFR down; named as ``sfrd``
+        `rampu`: Constrs, ramping limit up; named as ``rampu``, indexed by `gen.idx`
+        `rampd`: Constrs, ramping limit down; named as ``rampd``, indexed by `gen.idx`
         """
         super().build(info=info)
 
@@ -600,9 +608,17 @@ class rted(dcopf):
                                           for gen in GEN), name='rampd')
         return self.mdl
 
-    def solve(self, info=True):
+    def solve(self, info=True, no_build=False,
+              disable_sfr=False, disable_ramp=False):
         """
         Build and solve the model, will call "build()" first.
+
+        Parameters
+        ----------
+        info: bool
+            If True, will print out the solving information.
+        no_build: bool
+            If True, will not call ``build()`` and use existing ``mdl``.
 
         Returns
         -------
@@ -615,7 +631,19 @@ class rted(dcopf):
         pg = [0] * self.gen.shape[0]
         pru = [0] * self.gen.shape[0]
         prd = [0] * self.gen.shape[0]
-        self.build()
+        if not no_build:
+            self.build(info=True)
+        if disable_ramp:
+            disable_list = [self.rampu, self.rampd]
+            rl = ['rampu', 'rampd']
+        if disable_sfr:
+            disable_list = [self.pgmax, self.pgmin, self.sfru, self.sfrd,
+                           self.rampu, self.rampd]
+            rl = ['pgmax', 'pgmin', 'sfru', 'sfrd', 'rampu', 'rampd']
+        if disable_sfr or disable_ramp:
+            for c in disable_list:
+                self.mdl.remove(c)
+            logger.warning(f'{self.name} removed Constrs: {rl}')
         self.mdl.optimize()
         if self.mdl.Status == gb.GRB.OPTIMAL:
             if info:
@@ -745,13 +773,33 @@ class rted2(rted):
             self.gen['prdmax'].loc[row] = prdmax[n]
 
     def build(self, info=True):
+        """
+        Build RTED model as the attribute ``mdl``, will call `update_dict()` first.
+
+        After build, following attributes will be available:
+        `mdl`: model
+        `pg`: Vars, power generation; named as ``pg``, indexed by `gen.idx`
+        `pru`: Vars, RegUp power; named as ``pru``, indexed by `gen.idx`
+        `prd``: Vars, RegUp power; named as ``prd``, indexed by `gen.idx`
+        `obj`: Obj function, power generation cost;
+        `pb`: Constr, power balance; named as ``pb``
+        `llu`: Constrs, line limit up; named as ``llu``, indexed by `line.idx`
+        `lld`: Constrs, line limit down; named as ``lld``, indexed by `line.idx`
+        `pgmax`: Constrs, generator limit up; named as ``pgmax``, indexed by `gen.idx`
+        `pgmin`: Constrs, generator limit down; named as ``pgmin``, indexed by `gen.idx`
+        `prumax`: Constrs, SFR upper limit; named as ``prumax``, indexed by `gen.idx` of type2 generator
+        `prdmax`: Constrs, SFR lower limit; named as ``prdmax``, indexed by `gen.idx` of type2 generator
+        `sfru`: Constr, SFR up; named as ``sfru``
+        `sfrd`: Constr, SFR down; named as ``sfrd``
+        `rampu`: Constrs, ramping limit up; named as ``rampu``, indexed by `gen.idx`
+        `rampd`: Constrs, ramping limit down; named as ``rampd``, indexed by `gen.idx`
+        """
         super().build(info=info)
 
     def build_cons(self):
         super().build_cons()
         self.mdl.remove(self.pgmax)
         self.mdl.remove(self.pgmin)
-
 
         # --- GEN capacity ---
         # --- filter Type II gen ---
