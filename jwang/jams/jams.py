@@ -128,8 +128,8 @@ class dcbase:
         gsf_matrix = make_GSF(ssp)  # TODO: remove dependency on pandapower
         self.gsf_matrix = gsf_matrix
         gsfdata = pd.DataFrame(data=self.gsf_matrix,
-                            columns=self.bus['idx'].values,
-                            index=self.line['idx'].values)
+                               columns=self.bus['idx'].values,
+                               index=self.line['idx'].values)
         gsfT = gsfdata.T
         gsfT['bus'] = gsfT.index
         # gsfT['bus'] = self.bus['idx']
@@ -168,24 +168,23 @@ class dcbase:
         ----------
         obj : str
             Object name.
-
-
-        
+        attr : str
+            Attribute name.
+        df : bool, optional
+            if obj is a pandas.DataFrame, set ``df=True``
         """
-
+        # TODO: finish this
         if not hasattr(obj, attr):
             if df:
                 df = getattr(obj, attr)
 
-
-
     def data_check(self, skip_cost=False, info=True):
         """
-        Check data consistency.
+        Check data consistency:
 
-        1. Check if scaling factors of gen and load are valid.
-        1. Check if gen upper and lower limits are valid.
-        1. Check if cost data exists, when set ``skip_cost=True``.
+        1. If scaling factors of gen and load are valid.
+        1. If gen upper and lower limits are valid.
+        1. If cost data exists, when set ``skip_cost=True``.
 
         Parameters
         ----------
@@ -207,9 +206,12 @@ class dcbase:
                 self._default_cost()
                 absent_list.append('cost')
         if info:
-            if len(warning_list) > 1: logger.warning(f'Suspected data: {warning_list}')
-            if len(absent_list) > 1: logger.warning(f'Absent data: {absent_list}')
+            if len(warning_list) > 1:
+                logger.warning(f'Suspected data: {warning_list}')
+            if len(absent_list) > 1:
+                logger.warning(f'Missing data: {absent_list}')
         return [warning_list, absent_list]
+
 
 class dcopf(dcbase):
     """
@@ -273,7 +275,8 @@ class dcopf(dcbase):
         self.build_obj()
         self.build_cons()
         self.mdl_l_FLAG = True
-        if info: logger.warning(f'{self.name} GB model is loaded.')
+        if info:
+            logger.warning(f'{self.name} GB model is loaded.')
 
     def build_vars(self):
         """
@@ -289,7 +292,7 @@ class dcopf(dcbase):
         gencp['pmin'][gencp.u == 0] = 0
         # --- gen: pg ---
         self.pg = self.mdl.addVars(GEN, name='pg', vtype=gb.GRB.CONTINUOUS, obj=0,
-                              ub=gencp.pmax.tolist(), lb=gencp.pmin.tolist())
+                                   ub=gencp.pmax.tolist(), lb=gencp.pmin.tolist())
         return self.pg
 
     def build_obj(self):
@@ -325,9 +328,9 @@ class dcopf(dcbase):
             lhs[line] = sum(self.pg[gen] * self.gen_gsfdict[gen][line] for gen in GEN)
 
         self.llu = self.mdl.addConstrs((lhs[line]+self.linedict[line]['sup'] <= self.linedict[line]['rate_a'] for line in LINE),
-                                  name='llu')
+                                       name='llu')
         self.lld = self.mdl.addConstrs((lhs[line]+self.linedict[line]['sup'] >= -self.linedict[line]['rate_a'] for line in LINE),
-                                  name='lld')
+                                       name='lld')
         return self.mdl
 
     def solve(self, info=True):
@@ -344,7 +347,8 @@ class dcopf(dcbase):
         self.build()
         self.mdl.optimize()
         if self.mdl.Status == gb.GRB.OPTIMAL:
-            if info: logger.warning(f'{self.name} is solved.')
+            if info:
+                logger.warning(f'{self.name} is solved.')
             pg = []
             for gen in self.gendict.keys():
                 pg.append(self.pg[gen].X)
@@ -352,7 +356,8 @@ class dcopf(dcbase):
             total_cost = self.mdl.getObjective().getValue()
             logger.warning(f'{self.name}: total cost={np.round(total_cost, 3)}')
         else:
-            if info: logger.warning(f'{self.name} solved to {self.mdl.Status}, please check.')
+            if info:
+                logger.warning(f'{self.name} solved to {self.mdl.Status}, please check.')
             pg = [0] * self.gen.shape[0]
         # --- build output table ---
         self.res = pd.DataFrame()
@@ -382,7 +387,7 @@ class dcopf(dcbase):
         ol = (pl-pg)/pg
         if pg < pl:
             logger.warning(f'Overload by {np.round(ol*100, 2)}%.')
-            sf = np.floor(pg /pl * 100) / 100
+            sf = np.floor(pg / pl * 100) / 100
             self.load.sf = sf
             self.update_dict()
             self.build(info=False)
@@ -399,7 +404,7 @@ class dcopf(dcbase):
             self.build(info=False)
             self.mdl.optimize()
             self.mdl_m_FLAG = False
-        
+
         # --- IIS ---
         self.mdl.computeIIS()
         c = self.mdl.getConstrs()
@@ -418,7 +423,7 @@ class dcopf(dcbase):
         susp_vu = []
         for i in susp_vu_idx:
             susp_vu.append(vars[i])
-        
+
         if len(susp_c) > 0:
             logger.warning(f'{self.name} IISConstrs: {susp_c}')
         if len(susp_vl) > 0:
@@ -484,14 +489,14 @@ class rted(dcopf):
 
     def data_check(self, skip_cost=False, info=True):
         """
-        Check data consistency.
+        Check data consistency:
 
-        1. Check if scaling factors of gen and load are valid.
-        1. Check if gen upper and lower limits are valid.
-        1. Check if cost data exists, when set ``skip_cost=True``.
-        1. Check if cost data has cru, crd
-        1. Check if SFR requirements data ``sfrur``, ``sfrdr`` exist.
-        1. Check if gen data has ``ramp_5``.
+        1. If scaling factors of gen and load are valid.
+        1. If gen upper and lower limits are valid.
+        1. If cost data exists, when set ``skip_cost=True``.
+        1. If cost data has cru, crd
+        1. If SFR requirements data ``sfrur``, ``sfrdr`` exist.
+        1. If gen data has ``ramp_5``.
 
         Parameters
         ----------
@@ -511,10 +516,16 @@ class rted(dcopf):
                 absent_list.append('cost.sfrur')
             if not hasattr(self, 'sfrdr'):
                 self.sfrdr = 0
-                logger.warning('No RegDn requirement data (``sfrd``), set to 0.')
+                absent_list.append('sfrdr')
             if not hasattr(self.gen, 'ramp_5'):
                 self.gen['ramp_5'] = 100
-                logger.warning('No ``ramp_5`` in ``gen``, set to 100.')
+                absent_list.append('ramp_5')
+        if info:
+            if len(warning_list) > 1:
+                logger.warning(f'Suspected data: {warning_list}')
+            if len(absent_list) > 1:
+                logger.warning(f'Missing data: {absent_list}')
+        return [warning_list, absent_list]
 
     def build(self, info=True):
         """
@@ -564,7 +575,7 @@ class rted(dcopf):
 
     def build_cons(self):
         """
-        Build gurobi constraints as attribtues ``pb``, ``llu```, ``lld``, ``pgmax``,
+        Build gurobi constraints as attribtues ``pb``, ``llu``, ``lld``, ``pgmax``,
         ``pgmin``, ``sfru``, ``sfrd``, ``rampu``, and ``rampd``.
         """
         super().build_cons()
@@ -572,9 +583,9 @@ class rted(dcopf):
 
         # --- GEN capacity ---
         self.pgmax = self.mdl.addConstrs((self.pg[gen] + self.pru[gen] <= self.gendict[gen]['pmax'] for gen in GEN),
-                       name='pgmax')
+                                         name='pgmax')
         self.pgmin = self.mdl.addConstrs((self.pg[gen] - self.prd[gen] >= self.gendict[gen]['pmin'] for gen in GEN),
-                       name='pgmin')
+                                         name='pgmin')
 
         # --- SFR requirements ---
         # --- a) RegUp --
@@ -584,9 +595,9 @@ class rted(dcopf):
 
         # --- ramp limits ---
         self.rampu = self.mdl.addConstrs((self.pg[gen] - self.gendict[gen]['p_pre'] <= self.gendict[gen]['ramp_5']
-                       for gen in GEN), name='rampu')
+                                          for gen in GEN), name='rampu')
         self.rampd = self.mdl.addConstrs((self.gendict[gen]['p_pre'] - self.pg[gen] <= self.gendict[gen]['ramp_5']
-                       for gen in GEN), name='rampd')
+                                          for gen in GEN), name='rampd')
         return self.mdl
 
     def solve(self, info=True):
@@ -607,7 +618,8 @@ class rted(dcopf):
         self.build()
         self.mdl.optimize()
         if self.mdl.Status == gb.GRB.OPTIMAL:
-            if info: logger.warning(f'{self.name} is solved.')
+            if info:
+                logger.warning(f'{self.name} is solved.')
             pg = []
             pru = []
             prd = []
@@ -619,7 +631,8 @@ class rted(dcopf):
             total_cost = self.mdl.getObjective().getValue()
             logger.warning(f'{self.name}: total cost={np.round(total_cost, 3)}')
         else:
-            if info: logger.warning('Optimization ended with status %d' % self.mdl.Status)
+            if info:
+                logger.warning('Optimization ended with status %d' % self.mdl.Status)
             pg = [0] * self.gen.shape[0]
             pru = [0] * self.gen.shape[0]
             prd = [0] * self.gen.shape[0]
@@ -660,7 +673,7 @@ class rted2(rted):
         Cost data.
     """
 
-    def __init__(self, name='RTED', OutputFlag=1):
+    def __init__(self, name='RTED2', OutputFlag=1):
         """
         Real-time economic dispatch (RTED) using DCOPF,
         where type2 generator is supported.
@@ -681,15 +694,15 @@ class rted2(rted):
 
     def data_check(self, skip_cost=False, info=True):
         """
-        Check data consistency.
+        Check data consistency:
 
-        1. Check if scaling factors of gen and load are valid.
-        1. Check if gen upper and lower limits are valid.
-        1. Check if cost data exists, when set ``skip_cost=True``.
-        1. Check if cost data has cru, crd
-        1. Check if SFR requirements data ``sfrur``, ``sfrdr`` exist.
-        1. Check if gen data has ``ramp_5``.
-        1. Check if gen data has ``type``, ``prumax``, ``prdmax``.
+        1. If scaling factors of gen and load are valid.
+        1. If gen upper and lower limits are valid.
+        1. If cost data exists, when set ``skip_cost=True``.
+        1. If cost data has cru, crd
+        1. If SFR requirements data ``sfrur``, ``sfrdr`` exist.
+        1. If gen data has ``ramp_5``.
+        1. If gen data has ``type``, ``prumax``, ``prdmax``.
 
         Parameters
         ----------
@@ -708,95 +721,63 @@ class rted2(rted):
                 self.gen['prdmax'] = 0
                 absent_list.append('gen.prdmax')
         if info:
-            if len(warning_list) > 1: logger.warning(f'Suspected data: {warning_list}')
-            if len(absent_list) > 1: logger.warning(f'Absent data: {absent_list}')
+            if len(warning_list) > 1:
+                logger.warning(f'Suspected data: {warning_list}')
+            if len(absent_list) > 1:
+                logger.warning(f'Missing data: {absent_list}')
         return [warning_list, absent_list]
 
     def def_type2(self, gen_idx, prumax, prdmax):
         """
         Define type 2 generator.
 
+        Length of ``gen_idx`` must be equal to length of ``prumax`` and ``prdmax``.
+
         Parameters
         ----------
-        gen_idx : str
+        gen_idx : list of str
             Generator index that will be set to type 2.
         """
-        self.gen['type'] = 1
-        self.gen['prumax'] = 0
-        self.gen['prdmax'] = 0
-        for idx, rmax, dmax in zip(gen_idx, prumax, prdmax):
-            row = self.gen[self.gen['idx'] == idx].index[0]
-            self.gen['type'].iloc[row] = 2
-            self.gen['prumax'].iloc[row] = rmax
-            self.gen['prdmax'].iloc[row] = dmax
+        for n in range(len(gen_idx)):
+            row = self.gen[self.gen['idx'] == gen_idx[n]].index[0]
+            self.gen['type'].loc[row] = 2
+            self.gen['prumax'].loc[row] = prumax[n]
+            self.gen['prdmax'].loc[row] = prdmax[n]
 
-    def build(self):
-        self.data_check()
+    def build(self, info=True):
+        super().build(info=info)
 
-        # --- build RTED model ---
-        self.update_dict()
-        self.mdl = gb.Model(self.name)
-        self.mdl = self._build_vars(self.mdl)
-        self.mdl = self._build_obj(self.mdl)
-        self.mdl = self._build_cons(self.mdl)
-        logger.info('Successfully build RTED2 model.')
+    def build_cons(self):
+        super().build_cons()
+        self.mdl.remove(self.pgmax)
+        self.mdl.remove(self.pgmin)
 
-    def _build_cons(self, mdl):
-        ptotal = self.load.p0.sum()
-
-        gendict = self.gendict
-        linedict = self.linedict
-        gen_gsfdict = self.gen_gsfdict
-
-        GEN = gendict.keys()
-        LINE = linedict.keys()
-
-        # --- power balance ---
-        p_sum = sum(self.pg[gen] for gen in GEN)
-        mdl.addConstr(p_sum == ptotal, name='PowerBalance')
-
-        # --- line limits ---
-        for line in LINE:
-            lhs1 = sum(self.pg[gen] * gen_gsfdict[gen][line] for gen in GEN)
-            mdl.addConstr(lhs1+linedict[line]['sup'] <= linedict[line]['rate_a'], name=f'{line}_U')
-            mdl.addConstr(lhs1+linedict[line]['sup'] >= -linedict[line]['rate_a'], name=f'{line}_D')
 
         # --- GEN capacity ---
         # --- filter Type II gen ---
         gendict_I = dict()
-        for (new_key, new_value) in gendict.items():
-            if new_value['type'] == 1:
-                gendict_I[new_key] = new_value
         gendict_II = dict()
-        for (new_key, new_value) in gendict.items():
-            if new_value['type'] == 2:
-                gendict_II[new_key] = new_value
+        for (new_key, new_value) in self.gendict.items():
+                if int(new_value['type']) == 1:
+                    gendict_I[new_key] = new_value
+                elif int(new_value['type']) == 2:
+                    gendict_II[new_key] = new_value
         GENI = gendict_I.keys()
         GENII = gendict_II.keys()
         # --- a Type I GEN capacity limits ---
-        mdl.addConstrs((self.pg[gen] + self.pru[gen] <= gendict[gen]['pmax'] for gen in GENI),
-                       name='PG_max')
-        mdl.addConstrs((self.pg[gen] - self.prd[gen] >= gendict[gen]['pmin'] for gen in GENI),
-                       name='PG_mim')
+        pgmaxI = self.mdl.addConstrs((self.pg[gen] + self.pru[gen] <= self.gendict[gen]['pmax'] for gen in GENI),
+                    name='pgmax')
+        pgminI = self.mdl.addConstrs((self.pg[gen] - self.prd[gen] >= self.gendict[gen]['pmin'] for gen in GENI),
+                    name='pgmin')
         # --- b Type II Gen capacity and SFR limits---
-        mdl.addConstrs((self.pg[gen] <= gendict[gen]['pmax'] for gen in GENII),
-                       name='PG_max')
-        mdl.addConstrs((self.pg[gen] >= gendict[gen]['pmin'] for gen in GENII),
-                       name='PG_mim')
-        mdl.addConstrs((self.pru[gen] <= gendict[gen]['prumax'] for gen in GENII),
-                       name='PRU_max')
-        mdl.addConstrs((self.prd[gen] <= gendict[gen]['prdmax'] for gen in GENII),
-                       name='PRD_max')
-
-        # --- SFR requirements ---
-        # --- a) RegUp --
-        mdl.addConstr(sum(self.pru[gen] for gen in GEN) == self.du, name='RegUp')
-        # --- b) RegDn --
-        mdl.addConstr(sum(self.prd[gen] for gen in GEN) == self.dd, name='RegDn')
-
-        # --- AGC ramp limits ---
-        mdl.addConstrs((self.pg[gen] - gendict[gen]['p_pre'] <= gendict[gen]['ramp_5']
-                       for gen in GEN), name='RampU')
-        mdl.addConstrs((gendict[gen]['p_pre'] - self.pg[gen] <= gendict[gen]['ramp_5']
-                       for gen in GEN), name='RampD')
-        return mdl
+        pgmaxII = self.mdl.addConstrs((self.pg[gen] <= self.gendict[gen]['pmax'] for gen in GENII),
+                    name='pgmax')
+        pgminII = self.mdl.addConstrs((self.pg[gen] >= self.gendict[gen]['pmin'] for gen in GENII),
+                    name='pgmin')
+        self.prumax = self.mdl.addConstrs((self.pru[gen] <= self.gendict[gen]['prumax'] for gen in GENII),
+                    name='prumax')
+        self.prdmax = self.mdl.addConstrs((self.prd[gen] >= -1 * self.gendict[gen]['prdmax'] for gen in GENII),
+                    name='prdmax')
+        self.pgmax = pgmaxI | pgmaxII
+        self.pgmin = pgminI | pgminII
+        return self.mdl
