@@ -1,0 +1,73 @@
+plt.style.use('default')
+
+right = end_time
+
+fig_gen, ax_gen = plt.subplots(2, 3, figsize=(16, 8))
+plt.subplots_adjust(left=None, bottom=None, right=None,
+                    top=None, wspace=0.2, hspace=0.3)
+
+yheader = [f'G{i}' for i in range(1, 11)]
+
+ssa.TDS.plt.plot(ssa.TGOV1N.pout,
+                 linestyles=['-'],
+                 yheader=yheader, ytimes=ssa.config.mva,
+                 legend=True, show=False, right=right,
+                 title=r'Generation (solid: pout; dash: pref)',
+                 ylabel='MW',
+                 fig=fig_gen, ax=ax_gen[0, 0])
+
+ssa.TDS.plt.plot(ssa.TGOV1N.pref, ytimes=ssa.config.mva,
+                 legend=False, show=False, right=right,
+                 linestyles=[':'],
+                 fig=fig_gen, ax=ax_gen[0, 0])
+
+ssa.TDS.plt.plot(ssa.TGOV1N.paux,
+                 linestyles=['-'],
+                 yheader=yheader, ytimes=ssa.config.mva,
+                 legend=False, show=False, right=right,
+                 title=r'AGC power', ylabel='MW',
+                 fig=fig_gen, ax=ax_gen[0, 1])
+
+# Plot EV AGC response, hard code
+ax_gen[0, 1].plot(3600*(np.array(sse.tss)-caseH), sse.Prl, color='tab:orange', linestyle=':')
+ax_gen[0, 1].plot(3600*(np.array(sse.tss)-caseH), sse.Prcl, color='tab:orange', linestyle='-')
+# ax_gen[0, 1].set_ylim(top=max(sse.Prl) * 1.2)
+
+sfr_res_plot = sfr_res.drop(['cat'], axis=1).T
+sfr_res_plot.columns = sfr_res['cat'].values
+ax_gen[0, 2].plot(sfr_res_plot.time,
+                  ssa.config.mva * sfr_res_plot['ace'],
+                  label='AGC raw')
+ax_gen[0, 2].plot(sfr_res_plot.time, 
+                  ssa.config.mva * sfr_res_plot['in'],
+                  label='AGC input')
+ax_gen[0, 2].plot(sfr_res_plot.time,
+                  ssa.config.mva * sfr_res_plot['up'],
+                  label='SFR capacity',
+                  linestyle='--', color='k')
+ax_gen[0, 2].plot(sfr_res_plot.time, 
+                  ssa.config.mva * sfr_res_plot['dn'],
+                  linestyle='--', color='k')
+ax_gen[0, 2].set_ylabel('MW')
+ax_gen[0, 2].set_xlabel('Time [s]')
+ax_gen[0, 2].set_title('AGC input and SFR capacity')
+
+ssa.TDS.plt.plot(ssa.ACEc.ace,
+                 legend=False, show=False, right=right,
+                 linestyles=['-'], ytimes=ssa.config.mva,
+                 title=r'ACE', ylabel='MW',
+                 fig=fig_gen, ax=ax_gen[1, 0])
+
+ssa.TDS.plt.plot(ssa.COI.omega,
+                 legend=False, show=False, right=right,
+                 linestyles=['-'], ylabel='Hz',
+                 ytimes=ssa.config.freq,
+                 title=r'COI Frequency',
+                 fig=fig_gen, ax=ax_gen[1, 1])
+
+f_coi = pd.DataFrame()
+f_coi['f'] = ssa.dae.ts.y[:, ssa.COI.omega.a].reshape(-1).copy() * ssa.config.freq - ssa.config.freq
+f_coi.plot(kind='kde', legend=False, linewidth=1,
+           fig=fig_gen, ax=ax_gen[1, 2],
+           title=f'Freq. D., $\mu$={f_coi.f.mean().round(4)}, $\sigma$={f_coi.f.std().round(4)}')
+ax_gen[1, 2].set(xlabel='Deviation [Hz]', ylabel='')

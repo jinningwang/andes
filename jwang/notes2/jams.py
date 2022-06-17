@@ -63,7 +63,7 @@ class dcbase:
                 sup['net'] = (-1 * sup.load * sup.sf)
                 sup2 = sup[['bus', 'net']].groupby('bus').sum()
                 mdl_df['sup'] = np.matmul(self.gsf_matrix, sup2.net.values)
-            mdl_df.index = mdl_df.idx
+            mdl_df.index = mdl_df.idx.values
             setattr(self, mdl+'dict', mdl_df.T.to_dict())
 
     def from_andes(self, ssa):
@@ -297,7 +297,7 @@ class dcopf(dcbase):
         # --- gen: pg ---
         self.pg = self.mdl.addVars(GEN, name='pg', vtype=gb.GRB.CONTINUOUS, obj=0,
                                    ub=gencp.pmax.tolist(), lb=gencp.pmin.tolist())
-        return self.pg
+        return [self.pg, gencp]
 
     def build_obj(self):
         """
@@ -367,8 +367,8 @@ class dcopf(dcbase):
             for gen in self.gendict.keys():
                 pg.append(self.pg[gen].X)
             # --- cost ---
-            total_cost = self.mdl.getObjective().getValue()
-            logger.warning(f'{self.name}: total cost={np.round(total_cost, 3)}')
+            self.res_cost = self.mdl.getObjective().getValue()
+            logger.warning(f'{self.name}: total cost={np.round(self.res_cost, 3)}')
         else:
             if info:
                 logger.warning(f'{self.name} solved to {self.mdl.Status}, please check.')
@@ -570,8 +570,10 @@ class rted(dcopf):
         super().build_vars()
         GEN = self.gendict.keys()
         # --- RegUp, RegDn ---
-        self.pru = self.mdl.addVars(GEN, name='pru', vtype=gb.GRB.CONTINUOUS, obj=0)
-        self.prd = self.mdl.addVars(GEN, name='prd', vtype=gb.GRB.CONTINUOUS, obj=0)
+        self.pru = self.mdl.addVars(GEN, name='pru', vtype=gb.GRB.CONTINUOUS, obj=0,
+                                    lb=0, ub=gb.GRB.INFINITY)
+        self.prd = self.mdl.addVars(GEN, name='prd', vtype=gb.GRB.CONTINUOUS, obj=0,
+                                    lb=0, ub=gb.GRB.INFINITY)
         return [self.pg, self.pru, self.prd]
 
     def build_obj(self):
@@ -639,8 +641,7 @@ class rted(dcopf):
         pg = [0] * self.gen.shape[0]
         pru = [0] * self.gen.shape[0]
         prd = [0] * self.gen.shape[0]
-        if not no_build:
-            self.build(info=True)
+        if not no_build: self.build(info=info)
         if disable_ramp:
             disable_list = [self.rampu, self.rampd]
             rl = ['rampu', 'rampd']
@@ -649,13 +650,11 @@ class rted(dcopf):
                             self.rampu, self.rampd]
             rl = ['pgmax', 'pgmin', 'sfru', 'sfrd', 'rampu', 'rampd']
         if disable_sfr or disable_ramp:
-            for c in disable_list:
-                self.mdl.remove(c)
+            for c in disable_list: self.mdl.remove(c)
             logger.warning(f'{self.name} removed Constrs: {rl}')
         self.mdl.optimize()
         if self.mdl.Status == gb.GRB.OPTIMAL:
-            if info:
-                logger.warning(f'{self.name} is solved.')
+            if info: logger.warning(f'{self.name} is solved.')
             pg = []
             pru = []
             prd = []
@@ -664,11 +663,10 @@ class rted(dcopf):
                 pru.append(self.pru[gen].X)
                 prd.append(self.prd[gen].X)
             # --- cost ---
-            total_cost = self.mdl.getObjective().getValue()
-            logger.warning(f'{self.name}: total cost={np.round(total_cost, 3)}')
+            self.res_cost = self.mdl.getObjective().getValue()
+            logger.warning(f'{self.name}: total cost={np.round(self.res_cost, 3)}')
         else:
-            if info:
-                logger.warning('Optimization ended with status %d' % self.mdl.Status)
+            if info: logger.warning('Optimization ended with status %d' % self.mdl.Status)
             pg = [0] * self.gen.shape[0]
             pru = [0] * self.gen.shape[0]
             prd = [0] * self.gen.shape[0]
@@ -832,7 +830,7 @@ class rted2(rted):
                                       name='pgmin')
         self.prumax = self.mdl.addConstrs((self.pru[gen] <= self.gendict[gen]['prumax'] for gen in GENII),
                                           name='prumax')
-        self.prdmax = self.mdl.addConstrs((self.prd[gen] >= -1 * self.gendict[gen]['prdmax'] for gen in GENII),
+        self.prdmax = self.mdl.addConstrs((self.prd[gen] <= self.gendict[gen]['prdmax'] for gen in GENII),
                                           name='prdmax')
         self.pgmax = pgmaxI | pgmaxII
         self.pgmin = pgminI | pgminII
