@@ -86,8 +86,8 @@ ev_agc[0] = sse.ev.agc
 # idx
 ssp_res = runopp_map(ssp, ssa_key)
 
-cond_sch_gov = ssp_res.controllable & ssp_res.gov_idx.fillna(False).astype(bool)
-cond_sch_dg = ssp_res.controllable & ssp_res.dg_idx.fillna(False).astype(bool)
+cond_sch_gov = ssp_res.gov_idx.fillna(False).astype(bool)
+cond_sch_dg = ssp_res.dg_idx.fillna(False).astype(bool)
 cond_agc_gov = agc_table.ctrl * agc_table.gov_idx.fillna(False).astype(bool)
 cond_agc_dg = agc_table.ctrl * agc_table.dg_idx.fillna(False).astype(bool)
 
