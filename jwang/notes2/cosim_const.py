@@ -30,12 +30,6 @@ def dp_calc(d_syn, idx_ed, intv_ed, ratio=0.1):
 
 # --- co-sim constants ---
 
-rru = 1.0   # RegUp rate of EV
-rrd = 0     # RegDn rate of EV
-rsfr = 0.05  # ratio of SFR reserve out of total load
-
-t_total = 10    # total simulation time
-
 # length of each interval
 intv_ed = 300  # RTED interval, 300s
 intv_agc = 4    # AGC interval, 4s
@@ -68,8 +62,7 @@ ACE_raw = 0
 Kp = 0.1 # 0.05
 Ki = 0.1
 # SFR boundary and total AGC input
-sfr_res = pd.DataFrame(columns=['cat'] + list(np.arange(0, t_total, 4)))
-sfr_res['cat'] = ['time', 'ace', 'up', 'dn', 'in']
+sfr_res = -1 * np.ones((int(np.ceil(t_total / intv_agc)), 5))
 
 # initial load value
 ssa_p0 = ssa.PQ.p0.v.copy()
@@ -78,8 +71,8 @@ ssa_pq_idx = ssa.PQ.idx.v
 ssa_p0_sum = ssa_p0.sum()
 
 # EV results
-ev_soc = pd.DataFrame(columns=range(t_total))
-ev_agc = pd.DataFrame(columns=range(t_total))
+ev_soc = -1 * np.ones((t_total, sse.ev.shape[0]))
+ev_agc = -1 * np.ones((t_total, sse.ev.shape[0]))
 ev_soc[0] = sse.ev.soc
 ev_agc[0] = sse.ev.agc
 

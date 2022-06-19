@@ -6,6 +6,9 @@ ssp_gen0 = ssp.gen.copy()
 
 ssp.gen['p_mw'][ssp.gen.name==ev_idx] = sse.Ptc
 ssd.gen['p0'][ssd.gen.idx == ev_idx] = sse.Ptc / ssd.mva
+ssa.StaticGen.set(src='p0', attr='v', idx=ev_idx, value=sse.Ptc / ssa.config.mva)
+
+mdl_status = []
 
 for end_time in range(3600):  # t_total
     # --- interval RTED ---
@@ -34,9 +37,9 @@ for end_time in range(3600):  # t_total
 
         # solve RTED
         if end_time == 0:
-            dcres = ssd.solve(disable_ramp=True)
+            dcres = ssd.solve(disable_ramp=True, info=False)
         else:
-            dcres = ssd.solve()
+            dcres = ssd.solve(info=False)
 
         # reserve SFR and ramp from Generator limits in ``ssp``
         ssp_gen = pd.merge(left=ssp.gen.rename(columns={'name': 'stg_idx'}),
@@ -75,4 +78,14 @@ for end_time in range(3600):  # t_total
         # reset Generator limtis to normal limits
         ssp.gen.max_p_mw = ssp_gen0.max_p_mw
         ssp.gen.min_p_mw = ssp_gen0.min_p_mw
-        print(f"RTED {idx_ed} OK!")
+        mdl_status.append(ssd.mdl.status)
+
+not_solved = []
+error_status = []
+for i, s in enumerate(mdl_status):
+    if s != 2:
+        not_solved.append(i)
+        error_status.append(s)
+
+print('RTED not solved:{}'.format(not_solved))
+print('They run into: {}'.format(error_status))

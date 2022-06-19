@@ -6,6 +6,7 @@ ssp_gen0 = ssp.gen.copy()
 
 ssp.gen['p_mw'][ssp.gen.name==ev_idx] = sse.Ptc
 ssd.gen['p0'][ssd.gen.idx == ev_idx] = sse.Ptc / ssd.mva
+ssa.StaticGen.set(src='p0', attr='v', idx=ev_idx, value=sse.Ptc / ssa.config.mva)
 
 for end_time in range(t_total):  # t_total
     # --- interval RTED ---
@@ -96,7 +97,7 @@ for end_time in range(t_total):  # t_total
             ACE_input = max(ACE_raw, -1 * dcres.prd.sum())
             agc_table['paux'] = ACE_input * agc_table['bd'] * agc_table['gammap']
         agc_in[end_time] = agc_table['paux']
-        sfr_res[end_time] = [end_time, ACE_raw, dcres.pru.sum(),
+        sfr_res[end_time // intv_agc] = [end_time, ACE_raw, dcres.pru.sum(),
                              -1*dcres.prd.sum(), ACE_input]
 
         # --- record AGC ---
@@ -185,3 +186,8 @@ for end_time in range(t_total):  # t_total
     # break loop if TDS run into error
     if ssa.exit_code != 0:
         raise ValueError(f"TDS error! Exit with {ssa.exit_code}, end at {end_time}s.")
+
+# data format conversion
+ev_soc = pd.DataFrame(ev_soc.T, columns=range(t_total))
+ev_agc = pd.DataFrame(ev_agc.T, columns=range(t_total))
+sfr_res = pd.DataFrame(sfr_res, columns=['time', 'ace', 'up', 'dn', 'in'])

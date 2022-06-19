@@ -33,20 +33,18 @@ ax_gen[0, 1].plot(3600*(np.array(sse.tss)-caseH), sse.Prl, color='tab:orange', l
 ax_gen[0, 1].plot(3600*(np.array(sse.tss)-caseH), sse.Prcl, color='tab:orange', linestyle='-')
 # ax_gen[0, 1].set_ylim(top=max(sse.Prl) * 1.2)
 
-sfr_res_plot = sfr_res.drop(['cat'], axis=1).T
-sfr_res_plot.columns = sfr_res['cat'].values
-ax_gen[0, 2].plot(sfr_res_plot.time,
-                  ssa.config.mva * sfr_res_plot['ace'],
+ax_gen[0, 2].plot(sfr_res.time,
+                  ssa.config.mva * sfr_res['ace'],
                   label='AGC raw')
-ax_gen[0, 2].plot(sfr_res_plot.time, 
-                  ssa.config.mva * sfr_res_plot['in'],
+ax_gen[0, 2].plot(sfr_res.time, 
+                  ssa.config.mva * sfr_res['in'],
                   label='AGC input')
-ax_gen[0, 2].plot(sfr_res_plot.time,
-                  ssa.config.mva * sfr_res_plot['up'],
+ax_gen[0, 2].plot(sfr_res.time,
+                  ssa.config.mva * sfr_res['up'],
                   label='SFR capacity',
                   linestyle='--', color='k')
-ax_gen[0, 2].plot(sfr_res_plot.time, 
-                  ssa.config.mva * sfr_res_plot['dn'],
+ax_gen[0, 2].plot(sfr_res.time, 
+                  ssa.config.mva * sfr_res['dn'],
                   linestyle='--', color='k')
 ax_gen[0, 2].set_ylabel('MW')
 ax_gen[0, 2].set_xlabel('Time [s]')
