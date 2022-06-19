@@ -1,6 +1,6 @@
 # --- EV Aggregator ---
-sse = ev_ssm(ts=caseH, N=10000, step=1, tp=40,
-             lr=0.1, lp=40, seed=2022, name="EVA")
+sse = ev_ssm(ts=caseH, N=50000, step=1, tp=40,
+             lr=0.1, lp=60, seed=2022, name="EVA")
 sse.load_A("Aest.csv")
 
 # --- ANDES case ---
