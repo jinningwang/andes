@@ -36,7 +36,7 @@ ssa.TDS.plt.plot(ssa.TGOV1N.paux,
 # Plot EV AGC response, hard code
 ax_gen[0, 1].plot(3600*(np.array(sse.tss)-caseH), sse.Prl, color='tab:orange', linestyle=':')
 ax_gen[0, 1].plot(3600*(np.array(sse.tss)-caseH), sse.Prcl, color='tab:orange', linestyle='-')
-# ax_gen[0, 1].set_ylim(top=max(sse.Prl) * 1.2)
+# ax_gen[0, 1].set_ylim(top=max(1.2 * max(sse.Prl), ax_gen[0, 1].get_ylim()))
 
 ax_gen[0, 2].plot(sfr_res.time,
                   ssa.config.mva * sfr_res['ace'],

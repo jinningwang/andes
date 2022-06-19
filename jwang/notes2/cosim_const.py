@@ -70,12 +70,6 @@ ssa_q0 = ssa.PQ.q0.v.copy()
 ssa_pq_idx = ssa.PQ.idx.v
 ssa_p0_sum = ssa_p0.sum()
 
-# EV results
-ev_soc = -1 * np.ones((t_total, sse.ev.shape[0]))
-ev_agc = -1 * np.ones((t_total, sse.ev.shape[0]))
-ev_soc[0] = sse.ev.soc
-ev_agc[0] = sse.ev.agc
-
 # idx
 ssp_res = runopp_map(ssp, ssa_key)
 
@@ -88,3 +82,10 @@ sch_gov_idx = ssp_res.gov_idx[cond_sch_gov].tolist()
 sch_dg_idx = ssp_res.dg_idx[cond_sch_dg].tolist()
 agc_gov_idx = agc_table.gov_idx[cond_agc_gov].tolist()
 agc_dg_idx = agc_table.dg_idx[cond_agc_dg].tolist()
+
+# EV results, random select part of EVs to record SoC
+ridx = sse.ev.sample(frac=1, random_state=sse.seed).groupby('sx', sort=False).head(10).index
+ev_soc = -1 * np.ones((t_total, len(ridx)))
+ev_agc = -1 * np.ones((t_total, len(ridx)))
+ev_soc[0] = sse.ev.soc.iloc[ridx]
+ev_agc[0] = sse.ev.agc.iloc[ridx]

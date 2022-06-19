@@ -190,6 +190,11 @@ class ev_ssm():
     def __init__(self, ts=0, N=10000, step=1, tp=100,
                  lr=0.1, lp=100, seed=None, name="EVA"):
         """
+        Note:
+        
+        For efficienct, the EVs that are not in the range of [ts, ts+1] will be droped
+        after initialization.
+
         Parameters
         ----------
         ts: float
@@ -383,10 +388,10 @@ class ev_ssm():
         self.ev = self.ev[ev_cols]
         self.ev['agc'] = 0  # `agc` is indicator of participation of AGC
         self.ev['mod'] = 0  # `mod` is indicator of modified of over or under charge
-
         self.g_BCD()
-
         self.n_step = 1
+        # --- drop EVs that are not in time range ---
+        self.ev = self.ev[(self.ev.tf >= ts+1)&(self.ev.ts <= ts)].reset_index(drop=True)
         return True
 
     def g_u(self):

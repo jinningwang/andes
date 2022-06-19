@@ -167,8 +167,8 @@ for end_time in range(t_total):  # t_total
         sse.run(tf=caseH+end_time/3600, Pi=sse_agc[0],
                 is_updateA=False, is_rstate=True,
                 is_test=False, disable=True)
-        ev_soc[end_time] = sse.ev.soc
-        ev_agc[end_time] = sse.ev.agc
+        ev_soc[end_time] = sse.ev.soc.iloc[ridx]
+        ev_agc[end_time] = sse.ev.agc.iloc[ridx]
         sse.report(is_report=False)
         ssa.EV2.set(src='pref0', idx=ssp_res.dg_idx[ssp_res.stg_idx == ev_idx].values[0],
                     attr='v', value=sse.Ptc / ssa.config.mva)
@@ -186,8 +186,3 @@ for end_time in range(t_total):  # t_total
     # break loop if TDS run into error
     if ssa.exit_code != 0:
         raise ValueError(f"TDS error! Exit with {ssa.exit_code}, end at {end_time}s.")
-
-# data format conversion
-ev_soc = pd.DataFrame(ev_soc.T, columns=range(t_total))
-ev_agc = pd.DataFrame(ev_agc.T, columns=range(t_total))
-sfr_res = pd.DataFrame(sfr_res, columns=['time', 'ace', 'up', 'dn', 'in'])
