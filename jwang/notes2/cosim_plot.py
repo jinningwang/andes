@@ -2,6 +2,11 @@ plt.style.use('default')
 
 right = end_time
 
+# data format conversion
+ev_soc = pd.DataFrame(ev_soc.T, columns=range(t_total))
+ev_agc = pd.DataFrame(ev_agc.T, columns=range(t_total))
+sfr_res = pd.DataFrame(sfr_res, columns=['time', 'ace', 'up', 'dn', 'in'])
+
 fig_gen, ax_gen = plt.subplots(2, 3, figsize=(16, 8))
 plt.subplots_adjust(left=None, bottom=None, right=None,
                     top=None, wspace=0.2, hspace=0.3)
