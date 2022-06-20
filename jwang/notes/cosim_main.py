@@ -97,7 +97,7 @@ for end_time in range(t_total):  # t_total
             ACE_input = max(ACE_raw, -1 * dcres.prd.sum())
             agc_table['paux'] = ACE_input * agc_table['bd'] * agc_table['gammap']
         agc_in[end_time] = agc_table['paux']
-        sfr_res[end_time // intv_agc] = [end_time, ACE_raw, dcres.pru.sum(),
+        sfr_res_data[end_time // intv_agc] = [end_time, ACE_raw, dcres.pru.sum(),
                              -1*dcres.prd.sum(), ACE_input]
 
         # --- record AGC ---
@@ -167,8 +167,8 @@ for end_time in range(t_total):  # t_total
         sse.run(tf=caseH+end_time/3600, Pi=sse_agc[0],
                 is_updateA=False, is_rstate=True,
                 is_test=False, disable=True)
-        ev_soc[end_time] = sse.ev.soc.iloc[ridx]
-        ev_agc[end_time] = sse.ev.agc.iloc[ridx]
+        ev_soc_data[end_time] = sse.ev.soc.iloc[ridx]
+        ev_agc_data[end_time] = sse.ev.agc.iloc[ridx]
         sse.report(is_report=False)
         ssa.EV2.set(src='pref0', idx=ssp_res.dg_idx[ssp_res.stg_idx == ev_idx].values[0],
                     attr='v', value=sse.Ptc / ssa.config.mva)

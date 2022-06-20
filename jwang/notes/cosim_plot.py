@@ -3,9 +3,21 @@ plt.style.use('default')
 right = end_time
 
 # data format conversion
-ev_soc = pd.DataFrame(ev_soc.T, columns=range(t_total))
-ev_agc = pd.DataFrame(ev_agc.T, columns=range(t_total))
-sfr_res = pd.DataFrame(sfr_res, columns=['time', 'ace', 'up', 'dn', 'in'])
+ev_soc = pd.DataFrame(ev_soc_data.T, columns=range(t_total))
+ev_agc = pd.DataFrame(ev_agc_data.T, columns=range(t_total))
+sfr_res = pd.DataFrame(sfr_res_data, columns=['time', 'ace', 'up', 'dn', 'in'])
+
+# data save
+# Complement AGC table
+agc_smooth = pd.DataFrame(np.repeat(agc_in[list(np.arange(0, t_total, 4))].values, 4, axis=1),
+                          columns=list(np.arange(0, t_total, 1)))
+# Record EV output
+sse_out = pd.DataFrame()
+sse_out['time'] = sse.tss
+sse_out['agc'] = agc_smooth.iloc[10]  # AGC input to EV
+sse_out['Pr'] = sse.Prl
+sse_out['Prc'] = sse.Prcl
+sse_out.to_csv('sse_out.csv', index=False)
 
 fig_gen, ax_gen = plt.subplots(2, 3, figsize=(16, 8))
 plt.subplots_adjust(left=None, bottom=None, right=None,
