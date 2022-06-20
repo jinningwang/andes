@@ -38,13 +38,13 @@ for end_time in range(t_total):  # t_total
 
         # solve RTED
         if end_time == 0:
-            dcres = ssd.solve(disable_ramp=True)
+            dc_res = ssd.solve(disable_ramp=True)
         else:
-            dcres = ssd.solve()
+            dc_res = ssd.solve()
 
         # reserve SFR and ramp from Generator limits in ``ssp``
         ssp_gen = pd.merge(left=ssp.gen.rename(columns={'name': 'stg_idx'}),
-                           right=dcres.rename(columns={'gen': 'stg_idx'}),
+                           right=dc_res.rename(columns={'gen': 'stg_idx'}),
                            on='stg_idx', how='left')
         # SFR limits
         ssp_gen['max_sfr'] = ssp_gen.max_p_mw - ssp_gen.pru * ssp.sn_mva
@@ -67,18 +67,23 @@ for end_time in range(t_total):  # t_total
         # --- ACOPF, modify setpoints ---
         # store setpoints
         if end_time > 0:
-            p0 = ssp_res['p'].values  # store setpoints
+            p0 = ac_res['p'].values  # store setpoints
         else:
             p0 = [0] * ssa_key2.shape[0]
 
         # solve ACOPF
-        ssp_res = runopp_map(ssp, ssa_key)  # ACOPF resutls
-        ssp_res['p0'] = p0                  # last setpoints
-        ssp_res.fillna(False, inplace=True)  # Fill NA wil False
+        ac_res = runopp_map(ssp, ssa_key)  # ACOPF resutls
+        ac_res['p0'] = p0                  # last setpoints
+        ac_res.fillna(False, inplace=True)  # Fill NA wil False
 
         # reset Generator limtis to normal limits
         ssp.gen.max_p_mw = ssp_gen0.max_p_mw
         ssp.gen.min_p_mw = ssp_gen0.min_p_mw
+
+        # store dispatch results
+        dc_res_copy = dc_res.copy()
+        dc_res_copy['pg'] = ac_res.p
+        rted_res[idx_ed] = dc_res_copy.T.to_dict()
 
     # --- interval AGC ---
     if end_time % intv_agc == 0:
@@ -86,19 +91,19 @@ for end_time in range(t_total):  # t_total
         # --- allocate AGC ---
         # assign participation factor `bu`, `bd`
         agc_table.drop(['bu', 'bd'], axis=1, inplace=True)
-        agc_table = agc_table.merge(dcres[['gen', 'bu', 'bd']].rename(columns={'gen': 'stg_idx'}),
+        agc_table = agc_table.merge(dc_res[['gen', 'bu', 'bd']].rename(columns={'gen': 'stg_idx'}),
                                     on='stg_idx', how='left')
         # calc. AGC ---
-        ACE_input = min(ACE_raw, dcres.pru.sum())
+        ACE_input = min(ACE_raw, dc_res.pru.sum())
         if ACE_raw >= 0:
-            ACE_input = min(ACE_raw, dcres.pru.sum())
+            ACE_input = min(ACE_raw, dc_res.pru.sum())
             agc_table['paux'] = ACE_input * agc_table['bu'] * agc_table['gammap']
         else:
-            ACE_input = max(ACE_raw, -1 * dcres.prd.sum())
+            ACE_input = max(ACE_raw, -1 * dc_res.prd.sum())
             agc_table['paux'] = ACE_input * agc_table['bd'] * agc_table['gammap']
         agc_in[end_time] = agc_table['paux']
-        sfr_res_data[end_time // intv_agc] = [end_time, ACE_raw, dcres.pru.sum(),
-                             -1*dcres.prd.sum(), ACE_input]
+        sfr_res_data[end_time // intv_agc] = [end_time, ACE_raw, dc_res.pru.sum(),
+                             -1*dc_res.prd.sum(), ACE_input]
 
         # --- record AGC ---
         if end_time > 0:
@@ -122,34 +127,34 @@ for end_time in range(t_total):  # t_total
 
         # --- smooth setpoints ---
         if idx_ed == 0:
-            ssp_res['pref'] = ssp_res['p']
+            ac_res['pref'] = ac_res['p']
         else:
             if idx_agc == 0:
                 # record `pe` from TDS in the first AGC interval
-                copy = ssp_res.merge(right=pe_tds[['pe', 'stg_idx']], on='stg_idx', how='left')
-                ssp_res['pe_tds'] = copy.pe
+                copy = ac_res.merge(right=pe_tds[['pe', 'stg_idx']], on='stg_idx', how='left')
+                ac_res['pe_tds'] = copy.pe
             idx_step = min((end_time - idx_ed * intv_ed) // intv_agc + 1, n_step)
-            ssp_res['pref_step'] = ssp_res.p - ssp_res.p0
+            ac_res['pref_step'] = ac_res.p - ac_res.p0
             # smooth change threshold: 0.01
-            large_index = ssp_res['pref_step'][abs(ssp_res['pref_step']) > 0.01].index
-            ssp_res['pref_delta'] = ssp_res['pref_step']
-            ssp_res['pref_delta'].iloc[large_index] = ssp_res['pref_step'].iloc[large_index] / n_step * idx_step
-            ssp_res['pref'] = ssp_res.p0 + ssp_res.pref_delta
+            large_index = ac_res['pref_step'][abs(ac_res['pref_step']) > 0.01].index
+            ac_res['pref_delta'] = ac_res['pref_step']
+            ac_res['pref_delta'].iloc[large_index] = ac_res['pref_step'].iloc[large_index] / n_step * idx_step
+            ac_res['pref'] = ac_res.p0 + ac_res.pref_delta
 
             # a.SynGen
             ssa.TurbineGov.set(src='pref0', idx=sch_gov_idx,
-                               attr='v', value=ssp_res.pref[cond_sch_gov].values)
+                               attr='v', value=ac_res.pref[cond_sch_gov].values)
             # b.DG
             ssa.DG.set(src='pref0', idx=sch_dg_idx,
-                       attr='v', value=ssp_res.pref[cond_sch_dg].values)
+                       attr='v', value=ac_res.pref[cond_sch_dg].values)
 
     # --- intv_pq: alter load, run TDS ---
     # Initially, alter StaticGen: p0 and q0, run PFlow
     # Otherwise, alter Ppf and Qpf
     if end_time == 0:
-        stg_opf_idx = ssp_res.stg_idx[ssp_res.controllable].tolist()
-        stg_opf_val = ssp_res.p[ssp_res.controllable].tolist()
-        stg_opf_v = ssp_res.vm_pu[ssp_res.controllable].tolist()
+        stg_opf_idx = ac_res.stg_idx[ac_res.controllable].tolist()
+        stg_opf_val = ac_res.p[ac_res.controllable].tolist()
+        stg_opf_v = ac_res.vm_pu[ac_res.controllable].tolist()
         ssa.StaticGen.set(src='p0', idx=stg_opf_idx, attr='v', value=stg_opf_val)
         ssa.StaticGen.set(src='v0', idx=stg_opf_idx, attr='v', value=stg_opf_v)
         # initial load point set as the dispatch point
@@ -170,7 +175,7 @@ for end_time in range(t_total):  # t_total
         ev_soc_data[end_time] = sse.ev.soc.iloc[ridx]
         ev_agc_data[end_time] = sse.ev.agc.iloc[ridx]
         sse.report(is_report=False)
-        ssa.EV2.set(src='pref0', idx=ssp_res.dg_idx[ssp_res.stg_idx == ev_idx].values[0],
+        ssa.EV2.set(src='pref0', idx=ac_res.dg_idx[ac_res.stg_idx == ev_idx].values[0],
                     attr='v', value=sse.Ptc / ssa.config.mva)
 
     # run TDS

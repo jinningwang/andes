@@ -46,8 +46,8 @@ n_step = np.floor(intv_step/intv_agc)
 # AGC table
 agc_table = ssa_key2[['stg_idx', 'dg_idx', 'rg_idx', 'syg_idx', 
                       'exc_idx', 'gov_idx', 'gammap', 'ctrl']]
-dcres = ssd.res
-agc_table = agc_table.merge(dcres[['gen', 'bu', 'bd']].rename(columns={'gen': 'stg_idx'}),
+dc_res = ssd.res
+agc_table = agc_table.merge(dc_res[['gen', 'bu', 'bd']].rename(columns={'gen': 'stg_idx'}),
                             on='stg_idx', how='left')
 agc_table['paux'] = 0
 
@@ -71,15 +71,15 @@ ssa_pq_idx = ssa.PQ.idx.v
 ssa_p0_sum = ssa_p0.sum()
 
 # idx
-ssp_res = runopp_map(ssp, ssa_key)
+ac_res = runopp_map(ssp, ssa_key)
 
-cond_sch_gov = ssp_res.gov_idx.fillna(False).astype(bool)
-cond_sch_dg = ssp_res.dg_idx.fillna(False).astype(bool)
+cond_sch_gov = ac_res.gov_idx.fillna(False).astype(bool)
+cond_sch_dg = ac_res.dg_idx.fillna(False).astype(bool)
 cond_agc_gov = agc_table.ctrl * agc_table.gov_idx.fillna(False).astype(bool)
 cond_agc_dg = agc_table.ctrl * agc_table.dg_idx.fillna(False).astype(bool)
 
-sch_gov_idx = ssp_res.gov_idx[cond_sch_gov].tolist()
-sch_dg_idx = ssp_res.dg_idx[cond_sch_dg].tolist()
+sch_gov_idx = ac_res.gov_idx[cond_sch_gov].tolist()
+sch_dg_idx = ac_res.dg_idx[cond_sch_dg].tolist()
 agc_gov_idx = agc_table.gov_idx[cond_agc_gov].tolist()
 agc_dg_idx = agc_table.dg_idx[cond_agc_dg].tolist()
 
@@ -89,3 +89,6 @@ ev_soc_data = -1 * np.ones((t_total, len(ridx)))
 ev_agc_data = -1 * np.ones((t_total, len(ridx)))
 ev_soc_data[0] = sse.ev.soc.iloc[ridx]
 ev_agc_data[0] = sse.ev.agc.iloc[ridx]
+
+# dispatch results
+rted_res = {}

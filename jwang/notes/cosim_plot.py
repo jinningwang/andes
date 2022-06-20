@@ -86,3 +86,6 @@ f_coi.plot(kind='kde', legend=False, linewidth=1,
            fig=fig_gen, ax=ax_gen[1, 2],
            title=f'Freq. D., $\mu$={f_coi.f.mean().round(4)}, $\sigma$={f_coi.f.std().round(4)}')
 ax_gen[1, 2].set(xlabel='Deviation [Hz]', ylabel='')
+
+# TODO: plot bu, bd
+
