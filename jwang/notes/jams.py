@@ -46,7 +46,8 @@ class dcbase:
         ----------
         model : list
             list of models that need to be updated.
-            If None is given, update all models.
+            If None is given, update all models:
+            ['bus', 'gen', 'line', 'gen_gsf', 'cost']
         """
         # --- build dict ---
         if not model:
@@ -151,7 +152,7 @@ class dcbase:
 
     def _default_cost(self):
         """
-        Default cost data: c1=1, all other are 0.
+        Add default cost data: c1=1, all other are 0.
         """
         self.cost = pd.DataFrame()
         self.cost['idx'] = self.gen['idx']
@@ -182,9 +183,9 @@ class dcbase:
         """
         Check data consistency:
 
-        1. If scaling factors of gen and load are valid.
-        1. If gen upper and lower limits are valid.
-        1. If cost data exists, when set ``skip_cost=True``.
+        1. If scaling factors ``sf`` of gen and load are valid.
+        1. If gen upper and lower limits  ``pmax`` ``pmin`` are valid.
+        1. If cost data attr ``cost``exists, when set ``skip_cost=False``.
 
         Parameters
         ----------
@@ -262,6 +263,11 @@ class dcopf(dcbase):
         """
         Build DCOPF mpdel as attribute ``mdl``, will call `update_dict()` first.
 
+        Parameters
+        ----------
+        info: bool
+            If True, will log the building information.
+
         After build, following attributes will be available:
         `mdl`: model
         `pg`: Vars, power generation; named as ``pg``, indexed by `gen.idx`
@@ -285,6 +291,11 @@ class dcopf(dcbase):
     def build_vars(self):
         """
         Build gurobi vars as attribtue ``pg``.
+
+        Returns
+        -------
+        list: mixed list
+            [pg, gencp]
         """
         GEN = self.gendict.keys()
         # --- uncontrollable generators limit to p0 ---
@@ -302,6 +313,11 @@ class dcopf(dcbase):
     def build_obj(self):
         """
         Build gurobi objective as attribtue ``obj``.
+        
+        Returns
+        -------
+        list: mixed list
+            [obj, cost_pg]
         """
         GEN = self.gendict.keys()
         # --- minimize generation cost ---
@@ -346,7 +362,7 @@ class dcopf(dcbase):
         Parameters
         ----------
         info: bool
-            If True, will print out the solving information.
+            If True, will log the solving information.
         no_build: bool
             If True, will not call ``build()`` and use existing ``mdl``.
 
@@ -505,10 +521,10 @@ class rted(dcopf):
         """
         Check data consistency:
 
-        1. If scaling factors of gen and load are valid.
-        1. If gen upper and lower limits are valid.
-        1. If cost data exists, when set ``skip_cost=True``.
-        1. If cost data has cru, crd
+        1. If scaling factors ``sf`` of gen and load are valid.
+        1. If gen upper and lower limits  ``pmax`` ``pmin`` are valid.
+        1. If cost data attr ``cost``exists, when set ``skip_cost=False``.
+        1. If cost data attr ``cost``has ``cru``, ``crd``
         1. If SFR requirements data ``sfrur``, ``sfrdr`` exist.
         1. If gen data has ``ramp_5``.
 
@@ -545,6 +561,10 @@ class rted(dcopf):
         """
         Build RTED model as the attribute ``mdl``, will call `update_dict()` first.
 
+        Parameters
+        ----------
+        info : bool
+        
         After build, following attributes will be available:
         `mdl`: model
         `pg`: Vars, power generation; named as ``pg``, indexed by `gen.idx`
@@ -626,7 +646,7 @@ class rted(dcopf):
         Parameters
         ----------
         info: bool
-            If True, will print out the solving information.
+            If True, will log the solving information.
         no_build: bool
             If True, will not call ``build()`` and use existing ``mdl``.
 
@@ -730,10 +750,10 @@ class rted2(rted):
         """
         Check data consistency:
 
-        1. If scaling factors of gen and load are valid.
-        1. If gen upper and lower limits are valid.
-        1. If cost data exists, when set ``skip_cost=True``.
-        1. If cost data has cru, crd
+        1. If scaling factors ``sf`` of gen and load are valid.
+        1. If gen upper and lower limits  ``pmax`` ``pmin`` are valid.
+        1. If cost data attr ``cost``exists, when set ``skip_cost=False``.
+        1. If cost data attr ``cost``has ``cru``, ``crd``
         1. If SFR requirements data ``sfrur``, ``sfrdr`` exist.
         1. If gen data has ``ramp_5``.
         1. If gen data has ``type``, ``prumax``, ``prdmax``.
