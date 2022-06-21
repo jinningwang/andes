@@ -661,17 +661,20 @@ class rted(dcopf):
         pg = [0] * self.gen.shape[0]
         pru = [0] * self.gen.shape[0]
         prd = [0] * self.gen.shape[0]
+        self.update_dict()
         if not no_build: self.build(info=info)
+        rl = []
+        disable_list = []
         if disable_ramp:
-            disable_list = [self.rampu, self.rampd]
-            rl = ['rampu', 'rampd']
-        if disable_sfr:
-            disable_list = [self.pgmax, self.pgmin, self.sfru, self.sfrd,
-                            self.rampu, self.rampd]
-            rl = ['pgmax', 'pgmin', 'sfru', 'sfrd', 'rampu', 'rampd']
-        if disable_sfr or disable_ramp:
+            disable_list += [self.rampu, self.rampd]
+            rl += ['rampu', 'rampd']
+            logger.warning(f'{self.name} removed: {rl}')
             for c in disable_list: self.mdl.remove(c)
-            logger.warning(f'{self.name} removed Constrs: {rl}')
+        if disable_sfr:
+            # --- power balance ---
+            self.mdl.addConstrs((self.pru[gen] <= 0 for gen in self.gendict.keys()), name='lsfru')
+            self.mdl.addConstrs((self.prd[gen] <= 0 for gen in self.gendict.keys()), name='lsfrd')
+            logger.warning(f'{self.name} limited: sfru, sfrd')
         self.mdl.optimize()
         if self.mdl.Status == gb.GRB.OPTIMAL:
             if info: logger.warning(f'{self.name} is solved.')
@@ -855,3 +858,29 @@ class rted2(rted):
         self.pgmax = pgmaxI | pgmaxII
         self.pgmin = pgminI | pgminII
         return self.mdl
+
+class rted3(rted2):
+    def __init__(self, name='RTED', OutputFlag=0):
+        super().__init__(name=name, OutputFlag=OutputFlag)
+
+    def build_cons(self):
+        GEN = self.gendict.keys()
+        super().build_cons()
+        self.mdl.remove(self.sfru)
+        self.mdl.remove(self.sfrd)
+        # --- SFR requirements, soft ---
+        # --- a) RegUp --
+        self.sfru = self.mdl.addConstr(sum(self.pru[gen] for gen in GEN) <= self.sfrur, name='sfru')
+        # --- b) RegDn --
+        self.sfrd = self.mdl.addConstr(sum(self.prd[gen] for gen in GEN) <= self.sfrdr, name='sfrd')
+
+        return self.mdl
+
+    def build_obj(self):
+        GEN = self.gendict.keys()
+        [_, cost_pg, cost_ru, cost_rd] = super().build_obj()
+        k = -1000
+        sfrt = sum(self.pru[gen] + self.prd[gen] for gen in GEN)
+        cost = cost_pg + cost_ru + cost_rd + k * (sfrt - self.sfrur - self.sfrdr)
+        self.obj = self.mdl.setObjective(expr=cost,
+                                         sense=gb.GRB.MINIMIZE)

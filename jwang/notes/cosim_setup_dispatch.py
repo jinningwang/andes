@@ -23,7 +23,7 @@ gen_cost[:, 6] = np.array(c0) / ssa.config.mva
 add_gencost(ssp, gen_cost)
 
 # --- setup RTED: ssd ---
-ssd = rted2(name='RTED', OutputFlag=0)
+ssd = rted3(name='RTED', OutputFlag=0)
 ssd.from_andes(ssa)
 ssd.build()
 
@@ -55,6 +55,6 @@ ssd.cost['crd'] = ssd.cost.cru
 # --- benchmark ssd with ssp using DCOPF ---
 pp.rundcopp(ssp)
 dc_comp = ssp.res_gen.copy()
-gb_res = ssd.solve(disable_sfr=True, info=False)
+gb_res = ssd.solve(disable_sfr=True, disable_ramp=True, info=False)
 dc_comp['p_mw(GB)'] = ssd.mva * gb_res['pg'].values
 print(f"pp cost={ssp.res_cost}, gb cost={ssd.res_cost}")

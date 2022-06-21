@@ -11,7 +11,7 @@ andes.config_logger(stream_level=20)
 
 import pandapower as pp
 
-from jams import rted2
+from jams import rted2, rted3
 
 from ev_ssm import ev_ssm
 
