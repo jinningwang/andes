@@ -9,13 +9,13 @@ d_syn = pd.read_csv(ddata)
 
 # the coefficient can be adjusted to fit the case
 if caseH == 10:
-    d_syn['sload'] = 0.8*(d_syn['ha10'] - d_syn['ha10'].min()) / d_syn['ha10'].min() + 0.7
+    d_syn['sload'] = 0.8*(d_syn['ha10'] - d_syn['ha10'].min()) / d_syn['ha10'].min() + 0.65
 if caseH == 18:
-    d_syn['sload'] = 0.8*(d_syn['ha18'] - d_syn['ha18'].min()) / d_syn['ha18'].min() + 0.7
+    d_syn['sload'] = 0.8*(d_syn['ha18'] - d_syn['ha18'].min()) / d_syn['ha18'].min() + 0.65
 
 # extensify load fluctuation
 avg = d_syn['sload'].rolling(50).mean()
-d_syn['sload'] = 30 * (d_syn['sload'] - avg) + avg
+d_syn['sload'] = 15 * (d_syn['sload'] - avg) + avg
 
 # calculate expected load
 step = 300
