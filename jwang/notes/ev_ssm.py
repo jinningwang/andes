@@ -391,7 +391,11 @@ class ev_ssm():
         self.g_BCD()
         self.n_step = 1
         # --- drop EVs that are not in time range ---
-        self.ev = self.ev[(self.ev.tf >= ts+1)&(self.ev.ts <= ts)].reset_index(drop=True)
+        set0 = set(self.ev.index)
+        set1 = set(self.ev[(self.ev.tf <= ts)].index)
+        set2 = set(self.ev[(self.ev.ts >= ts + 1)].index)
+        set_in = set0 - set1 - set2
+        self.ev = self.ev.iloc[list(set_in)].reset_index(drop=True)
         return True
 
     def g_u(self):
