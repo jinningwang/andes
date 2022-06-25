@@ -14,8 +14,8 @@ if caseH == 18:
     d_syn['sload'] = 0.8*(d_syn['ha18'] - d_syn['ha18'].min()) / d_syn['ha18'].min() + 0.7
 
 # extensify load fluctuation
-avg = d_syn['sload'].rolling(50).mean()
-d_syn['sload'] = 15 * (d_syn['sload'] - avg) + avg
+avg = d_syn['sload'].rolling(70).mean()
+d_syn['sload'] = 3 * (d_syn['sload'] - avg) + avg
 
 # calculate expected load
 step = 300

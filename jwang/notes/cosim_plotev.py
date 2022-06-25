@@ -2,8 +2,6 @@ import matplotlib.font_manager
 
 sse.plot_agc()
 
-plt.style.use('default')
-
 agc_ev_idx = ev_agc[ev_agc.abs().sum(axis=1) >= 1].index
 
 fig_soc, ax_soc = plt.subplots(figsize=(5, 4))
