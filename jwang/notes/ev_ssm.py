@@ -665,7 +665,7 @@ class ev_ssm():
                 # --- update soc interval and online status ---
                 # charging/discharging power, kW
                 self.ev['dP'] = self.ev[['Pc', 'Pd', 'nc', 'nd', 'c', 'u']].apply(
-                    lambda x: x[0]*x[2]*x[5] if x[4] >= 0 else -1*x[1]*x[3]*x[5], axis=1)
+                    lambda x: x[0]*x[2]*x[4] if x[4] >= 0 else -1*x[1]*x[3]*x[4], axis=1)
                 # --- update and modify SoC ---
                 self.ev['soc'] = self.ev.soc + t_step * self.ev['dP'] / self.ev['Q']
                 self.ev['soc'] = self.ev['soc'].apply(lambda x: x if x < self.socu else self.socu)

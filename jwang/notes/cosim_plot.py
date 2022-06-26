@@ -4,6 +4,10 @@ right = end_time
 ev_soc = pd.DataFrame(ev_soc_data.T, columns=range(t_total))
 ev_agc = pd.DataFrame(ev_agc_data.T, columns=range(t_total))
 sfr_res = pd.DataFrame(sfr_res_data, columns=['time', 'ace', 'up', 'dn', 'in'])
+sfr_res['ace'] = sfr_res['ace'] * ssa.config.mva
+sfr_res['up'] = sfr_res['up'] * ssa.config.mva
+sfr_res['dn'] = sfr_res['dn'] * ssa.config.mva
+sfr_res['in'] = sfr_res['in'] * ssa.config.mva
 
 # data save
 # Complement AGC table
@@ -160,7 +164,8 @@ print(f"Total cost={np.round(gtc+ftc, 2)}")
 # --- save data ---
 cosim_out = pd.DataFrame()
 cosim_out['Time'] = ssa.dae.ts.t
-cosim_out['ACE'] = ssa.dae.ts.y[:, ssa.ACEc.ace.a].reshape(-1).copy() * ssa.config.mva
+# alter the sign of ACE
+cosim_out['ACE'] = ssa.dae.ts.y[:, ssa.ACEc.ace.a].reshape(-1).copy() * ssa.config.mva * -1
 cosim_out['freq'] = ssa.dae.ts.y[:, ssa.COI.omega.a].reshape(-1).copy() * ssa.config.freq
 pout9 = ssa.dae.ts.y[:, ssa.TGOV1N.pout.a[2]].reshape(-1)
 pref9 = ssa.dae.ts.y[:, ssa.TGOV1N.pref.a[2]].reshape(-1)
