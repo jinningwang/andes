@@ -777,6 +777,9 @@ class ev_ssm():
                     lambda x: 1 if x[0] <= self.sl else x[1], axis=1)
                 self.ev['mod'] = self.ev[['soc', 'c']].apply(
                     lambda x: 1 if x[0] <= self.sl else 0, axis=1)
+                # `CS` for just arrived EVs
+                self.ev['c'] = self.ev[['u0', 'u', 'c']].apply(
+                    lambda x: 1 if (x[0] == 0) & (x[1] == 1) else x[2], axis=1)
                 # `IS` for demanded charging SoC EVs
                 self.ev['c'] = self.ev[['soc', 'c', 'socd']].apply(
                     lambda x: 0 if (x[0] >= x[2]) & (x[1] == 1) else x[1], axis=1)
