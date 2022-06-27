@@ -780,11 +780,11 @@ class ev_ssm():
                 # `CS` for just arrived EVs
                 self.ev['c'] = self.ev[['u0', 'u', 'c']].apply(
                     lambda x: 1 if (x[0] == 0) & (x[1] == 1) else x[2], axis=1)
-                # `IS` for demanded charging SoC EVs
+                # `IS` for demanded charging [96%:x[2]] SoC EVs
                 self.ev['c'] = self.ev[['soc', 'c', 'socd']].apply(
-                    lambda x: 0 if (x[0] >= x[2]) & (x[1] == 1) else x[1], axis=1)
+                    lambda x: 0 if (x[0] >= 0.96) & (x[1] == 1) else x[1], axis=1)
                 self.ev['mod'] = self.ev[['soc', 'c', 'socd']].apply(
-                    lambda x: 1 if (x[0] >= x[2]) & (x[1] == 1) else 0, axis=1)
+                    lambda x: 1 if (x[0] >= 0.96) & (x[1] == 1) else 0, axis=1)
         # `IS` for offline EVs
         self.ev['c'] = self.ev[['c', 'u']].apply(
             lambda x: x[0]*x[1], axis=1)
