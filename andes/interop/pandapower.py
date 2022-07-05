@@ -80,8 +80,8 @@ def make_link_table(ssa):
     DataFrame
 
         Each column in the output Dataframe contains the ``idx`` of linked
-        ``StaticGen``, ``Bus``, ``DG``, ``SynGen``, ``Exciter``, and ``TurbineGov``,
-        ``gammap``, ``gammaq``.
+        ``StaticGen``, ``Bus``, ``DG``, ``RenGen``, ``RenExciter``, ``SynGen``,
+        ``Exciter``, and ``TurbineGov``, ``gammap``, ``gammaq``.
     """
     # build StaticGen df
     ssa_stg = build_group_table(ssa, 'StaticGen', ['u', 'name', 'idx', 'bus'])
@@ -93,8 +93,11 @@ def make_link_table(ssa):
     ssa_syg = build_group_table(ssa, 'SynGen', ['idx', 'bus', 'gen', 'gammap', 'gammaq'], ['GENCLS', 'GENROU'])
     # build DG df
     ssa_dg = build_group_table(ssa, 'DG', ['idx', 'bus', 'gen', 'gammap', 'gammaq'])
-    # build RG df
+
+    # build RenGen df
     ssa_rg = build_group_table(ssa, 'RenGen', ['idx', 'bus', 'gen', 'gammap', 'gammaq'])
+    # build RenExciter df
+    ssa_rexc = build_group_table(ssa, 'RenExciter', ['idx', 'reg'])
 
     # output
     ssa_bus = ssa.Bus.as_df()[['name', 'idx']]
@@ -129,8 +132,12 @@ def make_link_table(ssa):
     ssa_key = pd.merge(left=ssa_key,
                        right=ssa_gov.rename(columns={'idx': 'gov_idx', 'syn': 'syg_idx'}),
                        how='left', on='syg_idx')
-    cols = ['stg_name', 'stg_u', 'stg_idx', 'bus_idx', 'dg_idx', 'rg_idx', 'syg_idx', 'exc_idx',
-            'gov_idx', 'bus_name', 'gammap', 'gammaq']
+
+    ssa_key = pd.merge(left=ssa_key, how='left', on='rg_idx',
+                       right=ssa_rexc.rename(columns={'idx': 'rexc_idx', 'reg': 'rg_idx'}))
+
+    cols = ['stg_name', 'stg_u', 'stg_idx', 'bus_idx', 'dg_idx', 'rg_idx', 'rexc_idx',
+            'syg_idx', 'exc_idx', 'gov_idx', 'bus_name', 'gammap', 'gammaq']
     return ssa_key[cols].reset_index(drop=True)
 
 
@@ -165,7 +172,7 @@ def runopp_map(ssp, link_table, **kwargs):
 
     try:
         pp.runopp(ssp, **kwargs)
-    except:
+    except Exception:
         pp.rundcopp(ssp, **kwargs)
         logger.warning("ACOPF failed, DCOPF is used instead.")
 
@@ -182,7 +189,7 @@ def runopp_map(ssp, link_table, **kwargs):
     ssp_res['p'] = ssp_res['p_mw'] * ssp_res['gammap'] / ssp.sn_mva
     ssp_res['q'] = ssp_res['q_mvar'] * ssp_res['gammaq'] / ssp.sn_mva
     col = ['stg_idx', 'p', 'q', 'vm_pu', 'bus_idx', 'controllable',
-           'dg_idx', 'syg_idx', 'gov_idx', 'exc_idx']
+           'dg_idx', 'rg_idx', 'syg_idx', 'gov_idx', 'exc_idx']
     return ssp_res[col]
 
 
@@ -238,7 +245,7 @@ def _to_pp_bus(ssp, ssa_bus):
 def _to_pp_line(ssa, ssp, ssa_bus):
     """Create line in pandapower net"""
     # TODO: 1) from- and to- sides `Y`; 2)`g`
-    omega = 2 * pi * ssp.f_hz
+    omega = 2 * np.pi * ssp.f_hz
 
     ssa_bus_slice = ssa.Bus.as_df()[['idx', 'Vn']].rename(columns={"idx": "bus1", "Vn": "Vb"})
     ssa_line = ssa.Line.as_df().merge(ssa_bus_slice, on='bus1', how='left')
@@ -251,7 +258,7 @@ def _to_pp_line(ssa, ssp, ssa_bus):
     ssa_line['G'] = ssa_line["g"] * ssa_line['Yb'] * 1e6  # mS
     # default rate_a is 2000 MVA
     ssa_line['rate_a'] = ssa_line['rate_a'].replace(0, 2000)
-    ssa_line['max_i_ka'] = ssa_line["rate_a"] / ssa_line['Vb'] / 1.73205080757  # kA
+    ssa_line['max_i_ka'] = ssa_line["rate_a"] / ssa_line['Vb'] / np.sqrt(3)  # kA
 
     ssa_bus1 = ssa_bus[['idx']]
     ssa_bus1['from_bus'] = ssa_bus.index
@@ -310,7 +317,7 @@ def _to_pp_line(ssa, ssp, ssa_bus):
         tf_df['parallel'] = 1
         tf_df['oltc'] = False
         tf_df['tap_phase_shifter'] = False
-        tf_df['tap_step_degree'] = NaN
+        tf_df['tap_step_degree'] = np.NaN
         tf_df['df'] = 1
         tf_df['std_type'] = None
 
@@ -451,6 +458,11 @@ def to_pandapower(ssa, ctrl=[], verify=True, tol=1e-6):
         number of ``StaticGen``.
         If not given, controllability of generators will be assigned by default.
         Example input: [1, 0, 1, ...]; ``PV`` first, then ``Slack``.
+    verify : bool
+        If True, the converted network will be verified with the source ANDES system
+        using AC power flow.
+    tol : float
+        The tolerance of error.
 
     Returns
     -------

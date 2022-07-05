@@ -15,11 +15,11 @@ class TestFlagValue(unittest.TestCase):
         self.array.v = np.array(self.list.v)
 
     def test_flag_not_none(self):
-        self.fn = andes.core.service.FlagValue(self.list, value=None)
-        np.testing.assert_almost_equal(self.fn.v, np.array([1, 1, 0, 1, 1]))
+        fn = andes.core.service.FlagValue(self.list, value=None)
+        np.testing.assert_almost_equal(fn.v, np.array([1, 1, 0, 1, 1]))
 
-        self.fn = andes.core.service.FlagValue(self.array, value=None)
-        np.testing.assert_almost_equal(self.fn.v, np.array([1, 1, 0, 1, 1]))
+        fn = andes.core.service.FlagValue(self.array, value=None)
+        np.testing.assert_almost_equal(fn.v, np.array([1, 1, 0, 1, 1]))
 
 
 class TestFlagCondition(unittest.TestCase):
@@ -31,28 +31,28 @@ class TestFlagCondition(unittest.TestCase):
         self.array.v = np.array(self.list.v)
 
     def test_flag_cond(self):
-        self.fn = andes.core.service.FlagCondition(self.list, func=lambda x: np.less(x, 0))
-        np.testing.assert_almost_equal(self.fn.v, np.array([0, 0, 1, 1, 0]))
+        fn = andes.core.service.FlagCondition(self.list, func=lambda x: np.less(x, 0))
+        np.testing.assert_almost_equal(fn.v, np.array([0, 0, 1, 1, 0]))
 
     def test_flag_less_than(self):
-        self.fn = andes.core.service.FlagLessThan(self.list)
-        np.testing.assert_almost_equal(self.fn.v, np.array([0, 0, 1, 1, 0]))
+        fn = andes.core.service.FlagLessThan(self.list)
+        np.testing.assert_almost_equal(fn.v, np.array([0, 0, 1, 1, 0]))
 
     def test_flag_less_equal(self):
-        self.fn = andes.core.service.FlagLessThan(self.list, equal=True)
-        np.testing.assert_almost_equal(self.fn.v, np.array([1, 1, 1, 1, 0]))
+        fn = andes.core.service.FlagLessThan(self.list, equal=True)
+        np.testing.assert_almost_equal(fn.v, np.array([1, 1, 1, 1, 0]))
 
     def test_flag_greater_than(self):
-        self.fn = andes.core.service.FlagGreaterThan(self.list)
-        np.testing.assert_almost_equal(self.fn.v, np.array([0, 0, 0, 0, 1]))
+        fn = andes.core.service.FlagGreaterThan(self.list)
+        np.testing.assert_almost_equal(fn.v, np.array([0, 0, 0, 0, 1]))
 
     def test_flag_greater_equal(self):
-        self.fn = andes.core.service.FlagGreaterThan(self.list, equal=True)
-        np.testing.assert_almost_equal(self.fn.v, np.array([1, 1, 0, 0, 1]))
+        fn = andes.core.service.FlagGreaterThan(self.list, equal=True)
+        np.testing.assert_almost_equal(fn.v, np.array([1, 1, 0, 0, 1]))
 
     def test_apply_func(self):
-        self.fn = andes.core.service.ApplyFunc(self.list, np.abs)
-        np.testing.assert_almost_equal(self.fn.v, np.array([0, 0, 1, 2, 5]))
+        fn = andes.core.service.ApplyFunc(self.list, np.abs)
+        np.testing.assert_almost_equal(fn.v, np.array([0, 0, 1, 2, 5]))
 
 
 class TestParamCalc(unittest.TestCase):
@@ -80,3 +80,23 @@ class TestBackRef(unittest.TestCase):
 
         self.assertSequenceEqual(ss.StaticGen.SynGen.v[0], ['GENROU_2'])
         self.assertSequenceEqual(ss.SynGen.TurbineGov.v[0], ['TGOV1_1'])
+
+
+class TestDeviceFinder(unittest.TestCase):
+    """
+    Test DeviceFinder.
+    """
+
+    def test_no_find_or_add(self):
+        """
+        Test if DeviceFinder can skip finding and adding devices.
+        """
+
+        ss = andes.load(andes.get_case("ieee14/ieee14_regcp1_nopll.json"),
+                        default_config=True, no_output=True,
+                        )
+
+        self.assertIsNone(ss.REGCP1.pllidx.v[0])
+
+        # test if the flag for `am` is set to 0 to disable `am` measurement
+        self.assertEqual(ss.REGCP1.zam.v[0], 0)

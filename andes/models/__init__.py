@@ -12,11 +12,12 @@ The package for DAE models in ANDES.
 file_classes = list([
     ('info', ['Summary']),
     ('misc', ['Output']),
-    ('timer', ['Toggler', 'Fault', 'Alter']),
+    ('timer', ['Toggle', 'Fault', 'Alter']),
     ('timeseries', ['TimeSeries']),
     ('bus', ['Bus']),
     ('static', ['PQ', 'PV', 'Slack']),
     ('shunt', ['Shunt', "ShuntTD", 'ShuntSw']),
+    ('interface', ['Fortescue']),
     ('line', ['Line', 'Jumper']),
     ('area', ['Area', 'ACE', 'ACEc']),
     ('dynload', ['ZIP', 'FLoad']),
@@ -26,10 +27,10 @@ file_classes = list([
     ('vcomp', ['IEEEVC']),
     ('exciter', ['EXDC2', 'IEEEX1', 'ESDC2A', 'EXST1', 'ESST3A', 'SEXS',
                  'IEEET1', 'EXAC1', 'EXAC4', 'ESST4B', 'AC8B', 'IEEET3',
-                 'ESAC1A', 'ESST1A']),
+                 'ESAC1A', 'ESST1A', 'ESAC5A']),
     ('pss', ['IEEEST', 'ST2CUT']),
     ('motor', ['Motor3', 'Motor5']),
-    ('measurement', ['BusFreq', 'BusROCOF', 'PMU', 'PLL1']),
+    ('measurement', ['BusFreq', 'BusROCOF', 'PMU', 'PLL1', 'PLL2']),
     ('dc', ['Node', 'Ground', 'R', 'L', 'C', 'RCp', 'RCs', 'RLs', 'RLCs', 'RLCp']),
     ('acdc', ['VSCShunt']),
     ('renewable', ['REGCA1', 'REGCP1']),
@@ -43,4 +44,4 @@ file_classes = list([
 ])
 
 
-model_aliases = {"REGCVSG": "REGCV1", "REGCVSG2": "REGCV2"}
+model_aliases = {"REGCVSG": "REGCV1", "REGCVSG2": "REGCV2", "Toggler": "Toggle"}
