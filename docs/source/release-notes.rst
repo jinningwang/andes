@@ -9,6 +9,11 @@ The APIs before v3.0.0 are in beta and may change without prior notice.
 v1.7 Notes
 ==========
 
+v1.7.6 (2022-07-xx)
+-------------------
+- In eigenvalue analysis, added parameter sweeping and scatter plot for root
+  loci. See revised Example 4.
+
 v1.7.5 (2022-07-05)
 -------------------
 
@@ -56,22 +61,7 @@ Other changes:
 - In ``PVD1``, Enable `pmx` limiting by default.
 - In ``ST2CUT``, fix the type of ``busr2`` and ``busr`` to ``IdxParam``.
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-v1.6.6 (2022-04-xx)
--------------------
-- Renamed ``[System] call_stats`` to ``[System] save_stats`` for clarity.
-- Fix parsing issues with :ref:`GAST`.
-- Allow adjusting limits for state variables during initialization. Like for
-  algebraic variables, the default setting automatically adjusts the upper limit
-  but not the lower.
-=======
-=======
-v1.6.7 (2022-05-xx)
-=======
 v1.7.0 (2022-05-22)
->>>>>>> devcui
 -------------------
 Allow incrementally offloading simulation data from memory to the output file:
 
@@ -118,7 +108,6 @@ Other changes:
 v1.6 Notes
 ==========
 
->>>>>>> devcui
 v1.6.6 (2022-04-30)
 -------------------
 - Rename ``[System] call_stats`` to ``[System] save_stats`` for clarity. If
@@ -130,18 +119,12 @@ v1.6.6 (2022-04-30)
 - Allow adjusting limits for state variables during initialization. Like for
   algebraic variables, the default setting automatically adjusts the upper limit
   but not the lower one.
->>>>>>> devcui
 
 v1.6.5 (2022-04-19)
 -------------------
 - Added a TDS stop criteria based on rotor angle separation with reference to
   Power System Analysis Toolbox.
-<<<<<<< HEAD
-- Bug fix for `REGCV2`.
-- Bug fix for snapshot save and load. It now supports writing to and reading
-=======
 - Fix a bug for snapshot save and load. It now supports writing to and reading
->>>>>>> devcui
   from ``io.BytesIO()``.
 
 v1.6.4 (2022-04-17)

@@ -6,7 +6,6 @@ import logging
 import numpy as np
 from functools import wraps
 
-from numpy import NaN, pi
 from andes.shared import pd, rad2deg, deg2rad
 from andes.shared import pandapower as pp
 
@@ -93,7 +92,6 @@ def make_link_table(ssa):
     ssa_syg = build_group_table(ssa, 'SynGen', ['idx', 'bus', 'gen', 'gammap', 'gammaq'], ['GENCLS', 'GENROU'])
     # build DG df
     ssa_dg = build_group_table(ssa, 'DG', ['idx', 'bus', 'gen', 'gammap', 'gammaq'])
-
     # build RenGen df
     ssa_rg = build_group_table(ssa, 'RenGen', ['idx', 'bus', 'gen', 'gammap', 'gammaq'])
     # build RenExciter df
@@ -132,7 +130,6 @@ def make_link_table(ssa):
     ssa_key = pd.merge(left=ssa_key,
                        right=ssa_gov.rename(columns={'idx': 'gov_idx', 'syn': 'syg_idx'}),
                        how='left', on='syg_idx')
-
     ssa_key = pd.merge(left=ssa_key, how='left', on='rg_idx',
                        right=ssa_rexc.rename(columns={'idx': 'rexc_idx', 'reg': 'rg_idx'}))
 
