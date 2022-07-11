@@ -922,14 +922,18 @@ class ev_ssm():
         out = [self.Pt, self.Pu, self.Pl, self.Pa, self.Pc]
         return out
 
-    def g_frc(self, T=1/12):
+    def g_frc(self, adjust_num=False, Ne=1):
         """
-        Estimate frequency regulation capacity (MW).
+        Estimate frequency regulation capacity (FRC)[MW].
 
         Parameters
         ----------
-        T: float
-            time interval for RegUp and RegDn [H].
+        adjust_num: bool
+            True to adjust FRC by given number of EVs,
+            False to estimate FRC by the number of online EVs at
+            current time.
+        Ne: int
+            number of EVs to adjust FRC
 
         Returns
         -------
@@ -938,7 +942,6 @@ class ev_ssm():
         """
         self.report(is_report=False)
         self.ep()
-        # TODO: now the FRC estimates do not consider random traveling behavior
         RU = self.Pu - self.Pt
         RD = self.Pt - self.Pl
         # --- demanded-SOC limited FRC is not that reasonable ---
@@ -946,8 +949,11 @@ class ev_ssm():
         # self.prumax = max(min((self.wsoc - 0.8) * self.wQ / T, RU), 0)
         # self.prdmax = min((1 - self.wsoc) * self.wQ / T, RD)
         # --- SSM FRC is not that reasonable ---
-        self.prumax = RU
-        self.prdmax = RD
+        k = 1
+        if adjust_num:
+            k = Ne / self.ne
+        self.prumax = k * RU
+        self.prdmax = k * RD
         return [self.prumax, self.prdmax]
 
     def g_BCD(self):
@@ -1018,6 +1024,17 @@ class ev_ssm():
         ----------
         Pi: float
             Power input (MW)
+
+        Returns
+        -------
+        u: numpy.NDArray
+            vector `u`, (Ns,); mode (a), (d): CS - IS
+        v: numpy.NDArray
+            vector `v`, (Ns,); mode (b), (c): IS - DS
+        us: numpy.NDArray
+            vector `us`, (Ns+1,); probability mode (a), (d): CS - IS
+        vs: numpy.NDArray
+            vector `vs`, (Ns+1,); probability mode (b), (c): IS - DS
         """
         if Pi >= 0:
             Pi_cap = min(Pi, self.prumax)
@@ -1058,6 +1075,10 @@ class ev_ssm():
         """
         Generate control signal `u` `v` `us` `vs` as response to AGC input.
 
+        v1.0, C to I, high to low, I to D;
+
+        v2.0, C to I, I to D, high to low;
+
         Parameters
         ----------
         Pi: float
@@ -1085,22 +1106,17 @@ class ev_ssm():
 
         if Pi >= deadband:  # deadband0:  # RegUp
             # --- step I ---
-            ru = min(Pi, self.Pa) / (self.Pave * self.ne)
-            u = np.zeros(self.Ns)
+            ru = min(Pi, self.Pa) / (self.Pave * self.ne)  # total RegUp power
+            u = np.zeros(self.Ns)   # C->I
+            v = np.zeros(self.Ns)   # I->D
             for j in range(self.Ns):
-                a = ru - np.sum(x[j+1: self.Ns])
+                a = ru - np.sum(x[j+1: self.Ns]) - np.sum(x[j+1+self.Ns: 2*self.Ns])
                 u[j] = min(max(a, 0), x[j])
-
-            rv = max(Pi - self.Pa, 0) / (self.Pave * self.ne)
-            v = np.zeros(self.Ns)
-            for j in range(self.Ns):
-                a = rv - np.sum(x[j+1+self.Ns: 2*self.Ns]) - np.sum(u[j+1: self.Ns])
-                b = x[j+self.Ns] + u[j]
-                v[j] = min(max(a, 0), b)
+                v[j] = min(max(a-x[j], 0), x[j+self.Ns])
             # --- step II ---
             for j in range(self.Ns):
                 us[j] = min(safe_div(u[j], x[j]), 1)
-                vs[j] = min(safe_div(v[j], x[j+self.Ns]+u[j]), 1)
+                vs[j] = min(safe_div(v[j], x[j+self.Ns]+u[j]), 1)   # TODO: switch two times?
             # --- step III ---
             us[-1] = 1
             vs[-1] = 1
