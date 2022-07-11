@@ -110,7 +110,6 @@ andes/pycode
 
 # testfile
 icebar
-*_evsoc.csv
 
 # example excel files cache
 ~$*.xlsx
