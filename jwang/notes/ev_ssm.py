@@ -188,7 +188,8 @@ class ev_ssm():
         return ts
 
     def __init__(self, ts=0, N=10000, step=1, tp=100,
-                 lr=0.1, lp=100, seed=None, name="EVA"):
+                 lr=0.1, lp=100, seed=None, name="EVA",
+                 is_report=True):
         """
         Note:
         
@@ -241,7 +242,7 @@ class ev_ssm():
         self.tss = [ts]
         self.build(ts=ts)
         self.nel = [self.ne]
-        self.report()
+        self.report(is_report=is_report)
 
         self.Ptl = [self.Ptc]
         self.Pcl = [self.Pcc]
