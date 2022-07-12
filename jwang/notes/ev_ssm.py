@@ -212,6 +212,10 @@ class ev_ssm():
             Step size in seconds.
         seed: int
             Random seed. ``None`` for random.
+        name: str
+            EVA name.
+        is_report: bool
+            Passed to ``report()``, True to report EVA info.
         """
         # --- 1. init ---
         self.name = name
@@ -923,18 +927,16 @@ class ev_ssm():
         out = [self.Pt, self.Pu, self.Pl, self.Pa, self.Pc]
         return out
 
-    def g_frc(self, adjust_num=False, Ne=1):
+    def g_frc(self, nea=None):
         """
         Estimate frequency regulation capacity (FRC)[MW].
 
         Parameters
         ----------
-        adjust_num: bool
-            True to adjust FRC by given number of EVs,
-            False to estimate FRC by the number of online EVs at
-            current time.
-        Ne: int
-            number of EVs to adjust FRC
+        nea: int
+            adjusted EV numbers, multiplier of the FRC,
+            'nea' is set to `self.ne` if not given.
+            FRC = FRC0 * nea / ne
 
         Returns
         -------
@@ -950,11 +952,10 @@ class ev_ssm():
         # self.prumax = max(min((self.wsoc - 0.8) * self.wQ / T, RU), 0)
         # self.prdmax = min((1 - self.wsoc) * self.wQ / T, RD)
         # --- SSM FRC is not that reasonable ---
-        k = 1
-        if adjust_num:
-            k = Ne / self.ne
-        self.prumax = k * RU
-        self.prdmax = k * RD
+        if not nea:
+            nea = self.ne
+        self.prumax = RU * nea / self.ne
+        self.prdmax = RD * nea / self.ne
         return [self.prumax, self.prdmax]
 
     def g_BCD(self):
