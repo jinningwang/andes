@@ -16,8 +16,8 @@ def r_agc_sev(evs, us, vs):
     Single EV reaction `ev.c` to ctrl signal `us` `vs`.
 
     evs columns:
-    ['u', 'c', 'socx']
-      0,    1,    2
+    ['u', 'c', 'socx', 'pref']
+      0,    1,    2,     3
     """
     ctrl = evs[1]
     if us[-1]*vs[-1] == 0:  # no AGC
@@ -192,7 +192,7 @@ class ev_ssm():
                  is_report=True):
         """
         Note:
-        
+
         For efficienct, the EVs that are not in the range of [ts, ts+1] will be droped
         after initialization.
 
@@ -260,7 +260,7 @@ class ev_ssm():
         self.Per = 0  # error of AGC power
         self.Perl = [self.Per]
         self.y = self.ep()[0]
-        self.yl = [self.y] # estiamted output power
+        self.yl = [self.y]  # estiamted output power
 
         # --- SSM ---
         self.Pdbd = 1e-4  # Pdbd: deadband of Power
@@ -388,8 +388,17 @@ class ev_ssm():
         self.ev['xl'] = [[[], [], []]] * self.N
         self.ne = self.ev.u.sum()
 
+        # pereference
+        n_level = 4
+        self.pref = range(n_level)
+        self.rho = [1/n_level]*n_level
+        self.ev['pref'] = np.random.choice(self.pref,
+                                           p=self.rho,
+                                           size=self.N)
+
         ev_cols = ['u', 'u0',  'soc', 'bd', 'c', 'c2', 'c0', 'sx', 'dP', 'xl',
-                   'soci', 'socd', 'Pc', 'Pd', 'nc', 'nd', 'Q', 'ts', 'tf']
+                   'soci', 'socd', 'Pc', 'Pd', 'nc', 'nd', 'Q', 'ts', 'tf',
+                   'pref']
         self.ev = self.ev[ev_cols]
         self.ev['agc'] = 0  # `agc` is indicator of participation of AGC
         self.ev['mod'] = 0  # `mod` is indicator of modified of over or under charge
@@ -702,7 +711,7 @@ class ev_ssm():
         """
         Compute A matrix: cols: x(k), row: x(k+1)
         The sum of col should be 1.
-        
+
         Parameters
         ----------
         is_update: bool
@@ -1054,7 +1063,7 @@ class ev_ssm():
         while (abs(error) >= 0.005) & (iter < 10):
             error0 = error
             u, v, us, vs = self.g_agc(Pi_cap - self.Pr)
-            self.ev.c = self.ev[['u', 'c', 'sx']].apply(lambda x: r_agc_sev(x, us, vs), axis=1)
+            self.ev.c = self.ev[['u', 'c', 'sx', 'pref']].apply(lambda x: r_agc_sev(x, us, vs), axis=1)
             self.g_x()
             # --- record output ---
             self.y0 = self.ep()[0]  # self.Pt
