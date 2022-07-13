@@ -11,30 +11,36 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def r_agc_sev(evs, us, vs):
+def r_agc_sev(evs, us, vs, usp, vsp):
     """
     Single EV reaction `ev.c` to ctrl signal `us` `vs`.
 
     evs columns:
-    ['u', 'c', 'socx', 'pref']
+    ['u', 'c', 'sx', 'pref']
       0,    1,    2,     3
     """
     ctrl = evs[1]
-    if us[-1]*vs[-1] == 0:  # no AGC
+    if evs[0] == 0:  # offline
+        ctrl = 0
+    elif us[-1]*vs[-1] == 0:  # no AGC
         ctrl = evs[1]
     elif evs[0] == 1:  # online
         if (evs[1] == 0) & (vs[-1] == 1):  # response with vs1 [I to D]
-            ctrl = np.random.choice(a=[-1, 0], p=[vs[evs[2]], 1-vs[evs[2]]],
-                                    size=1, replace=True)[0]
-        if (evs[1] == 1) & (us[-1] == 1):  # response with us1, [C to I]
-            ctrl = np.random.choice(a=[0, 1], p=[us[evs[2]], 1-us[evs[2]]],
-                                    size=1, replace=True)[0]
-        if (evs[1] == 0) & (us[-1] == -1):  # response with us-1 [I to C]
-            ctrl = np.random.choice(a=[1, 0], p=[us[evs[2]], 1-us[evs[2]]],
-                                    size=1, replace=True)[0]
-        if (evs[1] == -1) & (vs[-1] == -1):  # response with vs-1 [D to I]
-            ctrl = np.random.choice(a=[0, -1], p=[vs[evs[2]], 1-vs[evs[2]]],
-                                    size=1, replace=True)[0]
+            a=[-1, 0]
+            p=[vsp[evs[2], evs[3]], 1-vsp[evs[2], evs[3]]]
+        elif (evs[1] == 1) & (us[-1] == 1):  # response with us1, [C to I]
+            a=[0, 1]
+            p=[usp[evs[2], evs[3]], 1-usp[evs[2], evs[3]]]
+        elif (evs[1] == 0) & (us[-1] == -1):  # response with us-1 [I to C]
+            a=[1, 0]
+            p=[usp[evs[2], evs[3]], 1-usp[evs[2], evs[3]]]
+        elif (evs[1] == -1) & (vs[-1] == -1):  # response with vs-1 [D to I]
+            a=[0, -1]
+            p=[vsp[evs[2], evs[3]], 1-vsp[evs[2], evs[3]]]
+        else:  # remain unchange for other conditions
+            a=[evs[1]]
+            p=[1]
+        ctrl = np.random.choice(a=a, p=p, size=1, replace=True)[0]
     elif evs[0] == 0:  # offline
         ctrl = 0
     return ctrl
@@ -189,12 +195,16 @@ class ev_ssm():
 
     def __init__(self, ts=0, N=10000, step=1, tp=100,
                  lr=0.1, lp=100, seed=None, name="EVA",
-                 is_report=True):
+                 n_pref=4, is_report=True):
         """
         Note:
 
-        For efficienct, the EVs that are not in the range of [ts, ts+1] will be droped
-        after initialization.
+        For efficiency, the EVs that are not involved in the time range
+        [``ts``, ``ts+1``] will be droped after initialization.
+
+        ``n_pref`` is the number of pereference levels, lower level is
+        more likely to response AGC. EVs are evenly distributed on each
+        level.
 
         Parameters
         ----------
@@ -214,6 +224,8 @@ class ev_ssm():
             Random seed. ``None`` for random.
         name: str
             EVA name.
+        n_pref: int
+            Number of pereference level, n_pref >= 1.
         is_report: bool
             Passed to ``report()``, True to report EVA info.
         """
@@ -227,6 +239,7 @@ class ev_ssm():
         self.lp = lp
         self.seed = seed
         np.random.seed(self.seed)
+        self.n_pref = n_pref
         # --- 1a. uniform distribution parameters range ---
         self.ev_ufparam = dict(Ns=20,
                                Pl=5.0, Pu=7.0,
@@ -244,7 +257,7 @@ class ev_ssm():
                                       'finish charging time 1', 'finish charging time 2']}
         self.ts = ts
         self.tss = [ts]
-        self.build(ts=ts)
+        self.build(ts=ts, n_pref=self.n_pref)
         self.nel = [self.ne]
         self.report(is_report=is_report)
 
@@ -277,9 +290,16 @@ class ev_ssm():
         ncave = self.ev.nc.mean()
         self.Th = (self.sdu - self.sdl) * Qave / (2 * self.Pave * ncave)
 
-    def build(self, ts):
+    def build(self, ts, n_pref):
         """
         Build the ev DataFrame.
+
+        Parameters
+        ----------
+        ts: float
+            Current time in hour, [0, 24].
+        n_pref: int
+            Number of pereference level, n_pref >= 1.
 
         Returns
         -------
@@ -389,9 +409,11 @@ class ev_ssm():
         self.ne = self.ev.u.sum()
 
         # pereference
-        n_level = 4
-        self.pref = range(n_level)
-        self.rho = [1/n_level]*n_level
+        # Note: pereference is chosen from a list [0, 1, 2, n_pref]
+        # the probability of each level is evenly distributed
+        # lower one is preferred to be firstly chosen to response AGC
+        self.pref = list(range(self.n_pref))
+        self.rho = [1 / self.n_pref] * self.n_pref
         self.ev['pref'] = np.random.choice(self.pref,
                                            p=self.rho,
                                            size=self.N)
@@ -1056,6 +1078,8 @@ class ev_ssm():
         v = np.zeros(self.Ns)
         us = np.zeros(self.Ns+1)
         vs = np.zeros(self.Ns+1)
+        usp = np.repeat(us.reshape(self.Ns+1, 1), self.n_pref, axis=1)
+        vsp = np.repeat(vs.reshape(self.Ns+1, 1), self.n_pref, axis=1)
         # corrected control
         error = Pi_cap - self.Pr
         iter = 0
@@ -1063,7 +1087,26 @@ class ev_ssm():
         while (abs(error) >= 0.005) & (iter < 10):
             error0 = error
             u, v, us, vs = self.g_agc(Pi_cap - self.Pr)
-            self.ev.c = self.ev[['u', 'c', 'sx', 'pref']].apply(lambda x: r_agc_sev(x, us, vs), axis=1)
+            # pereference signal
+            usp = np.repeat(us.reshape(self.Ns+1, 1), self.n_pref, axis=1)
+            vsp = np.repeat(vs.reshape(self.Ns+1, 1), self.n_pref, axis=1)
+            for i_sx in range(self.Ns):
+                pu = us[i_sx]
+                pv = vs[i_sx]
+                if (us[-1] == 1) & (vs[-1] == 1):
+                    for i in range(len(self.rho)):
+                        su = np.sum([m*n for m,n in zip(self.rho[0:i], usp[i_sx, 0:i])])
+                        sv = np.sum([m*n for m,n in zip(self.rho[0:i], vsp[i_sx, 0:i])])
+                        usp[i_sx, i] = max(min((pu-su)/self.rho[i], 1), 0)
+                        vsp[i_sx, i] = max(min((pv-sv)/self.rho[i], 1), 0)
+                if (us[-1] == -1) & (vs[-1] == -1):
+                    for i in range(len(self.rho)-1, -1, -1):
+                        su = np.sum([m*n for m,n in zip(self.rho[i+1:], usp[i_sx, i+1:])])
+                        sv = np.sum([m*n for m,n in zip(self.rho[i+1:], vsp[i_sx, i+1:])])
+                        usp[i_sx, i] = max(min((pu-su)/self.rho[i], 1), 0)
+                        vsp[i_sx, i] = max(min((pv-sv)/self.rho[i], 1), 0)
+
+            self.ev.c = self.ev[['u', 'c', 'sx', 'pref']].apply(lambda x: r_agc_sev(x, us, vs, usp, vsp), axis=1)
             self.g_x()
             # --- record output ---
             self.y0 = self.ep()[0]  # self.Pt
@@ -1079,8 +1122,13 @@ class ev_ssm():
             if abs(error0 - error) < 0.005:
                 break
         self.ev['agc'] = c0 - self.ev.c
-        self.uv = [u, v, us, vs]
-        return u, v, us, vs
+        self.uv = [u, v, us, vs, usp, vsp]
+        # TODO: ps array
+        self.usp = np.repeat(us[0:self.Ns].reshape(self.Ns, 1),
+                             self.n_pref, axis=1)
+        self.vsp = np.repeat(vs[0:self.Ns].reshape(self.Ns, 1),
+                             self.n_pref, axis=1)
+        return u, v, us, vs, usp, vsp
 
     def g_agc(self, Pi):
         """
