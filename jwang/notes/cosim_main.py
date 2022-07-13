@@ -31,7 +31,11 @@ for end_time in range(t_total):  # t_total
             ssd.gen.p_pre = vl.values
 
         # def. SFR requirements and calc. EV SFR capacities
-        [prumax, prdmax] = sse.g_frc()
+        k1 = ev_num['ne'][(ev_num['time'] >= sse.ts) & (ev_num['time'] <= sse.ts+1/12)].mean()
+        k0 = ev_num['ne'][ev_num['time'] >= sse.ts].iloc[0]
+        k = k1 / k0
+        # estiamte FRC
+        [prumax, prdmax] = sse.g_frc(nea=sse.ne*k)
         # def. percentage of EV SFR capacities
         ssd.def_type2([ev_idx], [prumax*rru/ssd.mva], [prdmax*rrd/ssd.mva])
         ssd.def_sfr(sfrur=sfrur*ssa_p0_sum, sfrdr=sfrdr*ssa_p0_sum)
