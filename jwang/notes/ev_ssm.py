@@ -26,20 +26,20 @@ def r_agc_sev(evs, us, vs, usp, vsp):
         ctrl = evs[1]
     elif evs[0] == 1:  # online
         if (evs[1] == 0) & (vs[-1] == 1):  # response with vs1 [I to D]
-            a=[-1, 0]
-            p=[vsp[evs[2], evs[3]], 1-vsp[evs[2], evs[3]]]
+            a = [-1, 0]
+            p = [vsp[evs[2], evs[3]], 1-vsp[evs[2], evs[3]]]
         elif (evs[1] == 1) & (us[-1] == 1):  # response with us1, [C to I]
-            a=[0, 1]
-            p=[usp[evs[2], evs[3]], 1-usp[evs[2], evs[3]]]
+            a = [0, 1]
+            p = [usp[evs[2], evs[3]], 1-usp[evs[2], evs[3]]]
         elif (evs[1] == 0) & (us[-1] == -1):  # response with us-1 [I to C]
-            a=[1, 0]
-            p=[usp[evs[2], evs[3]], 1-usp[evs[2], evs[3]]]
+            a = [1, 0]
+            p = [usp[evs[2], evs[3]], 1-usp[evs[2], evs[3]]]
         elif (evs[1] == -1) & (vs[-1] == -1):  # response with vs-1 [D to I]
-            a=[0, -1]
-            p=[vsp[evs[2], evs[3]], 1-vsp[evs[2], evs[3]]]
+            a = [0, -1]
+            p = [vsp[evs[2], evs[3]], 1-vsp[evs[2], evs[3]]]
         else:  # remain unchange for other conditions
-            a=[evs[1]]
-            p=[1]
+            a = [evs[1]]
+            p = [1]
         ctrl = np.random.choice(a=a, p=p, size=1, replace=True)[0]
     elif evs[0] == 0:  # offline
         ctrl = 0
@@ -247,14 +247,15 @@ class ev_ssm():
                                Ql=20.0, Qu=30.0,
                                socl=0, socu=1)
         #  --- 1b. normal distribution parameters range ---
-        self.ev_pdf_name = ['soci', 'socd', 'ts1', 'ts2', 'tf1', 'tf2']
-        self.ev_pdf_data = {'mean':     [0.3,    0.8,    -6.5,  17.5,   8.9,  32.9],
-                            'var':      [0.05,   0.03,   3.4,   3.4,    3.4,  3.4],
-                            'lb':       [0.2,    0.7,    0.0,   5.5,    0.0,  20.9],
-                            'ub':       [0.4,    0.9,    5.5,   24.0,   20.9, 24.0],
+        self.ev_pdf_name = ['soci', 'socd', 'ts1', 'ts2', 'tf1', 'tf2', 'tt']
+        self.ev_pdf_data = {'mean': [0.3,    0.8,    -6.5,  17.5,   8.9,  32.9, 0.2],
+                            'var': [0.05,   0.03,   3.4,   3.4,    3.4,  3.4, 0.05],
+                            'lb': [0.2,    0.7,    0.0,   5.5,    0.0,  20.9, 0],
+                            'ub': [0.4,    0.9,    5.5,   24.0,   20.9, 24.0, 1],
                             'info':  ['initial SoC', 'demanded SoC',
                                       'start charging time 1', 'start charging time 2',
-                                      'finish charging time 1', 'finish charging time 2']}
+                                      'finish charging time 1', 'finish charging time 2',
+                                      'tolerance of increased charging time']}
         self.ts = ts
         self.tss = [ts]
         self.build(ts=ts, n_pref=self.n_pref)
@@ -372,6 +373,9 @@ class ev_ssm():
         self.ev['tf'] = tp['tf']
         self.ev['u'] = 1
 
+        # # tolerated increased charging time
+        # self.ev[self.ev['tt'] <= ]['tt']
+
         # Initialize delta power
         self.ev['dP'] = 0
 
@@ -399,6 +403,7 @@ class ev_ssm():
         self.ev['c'] = self.ev[['soc', 'c', 'socd']].apply(
             lambda x: 0 if (x[0] >= x[2]) & (x[1] == 1) else x[1], axis=1)
         self.ev[['c', 'c2', 'c0']] = self.ev[['c', 'c2', 'c0']].astype(int)
+        self.ev['lc'] = 0  # low charge, 0 for regular, 1 for low charge
 
         self.find_sx()
         self.g_x()
@@ -419,8 +424,8 @@ class ev_ssm():
                                            size=self.N)
 
         ev_cols = ['u', 'u0',  'soc', 'bd', 'c', 'c2', 'c0', 'sx', 'dP', 'xl',
-                   'soci', 'socd', 'Pc', 'Pd', 'nc', 'nd', 'Q', 'ts', 'tf',
-                   'pref']
+                   'soci', 'socd', 'Pc', 'Pd', 'nc', 'nd', 'Q', 'ts', 'tf', 'tt',
+                   'pref', 'lc']
         self.ev = self.ev[ev_cols]
         self.ev['agc'] = 0  # `agc` is indicator of participation of AGC
         self.ev['mod'] = 0  # `mod` is indicator of modified of over or under charge
@@ -468,7 +473,8 @@ class ev_ssm():
 
         # --- output tab ---
         # TODO: consider low charged path?
-        states = self.ev[['c2', 'sx', 'u']].apply(lambda x: (x[0], x[1]) if x[2] else (-1, -1), axis=1)
+        states = self.ev[self.ev['lc'] == 0][['c2', 'sx', 'u']].apply(
+            lambda x: (x[0], x[1]) if x[2] else (-1, -1), axis=1)
         res = dict(states.value_counts())
         self.xtab = pd.DataFrame(columns=range(self.Ns), index=[0, 1, 2], data=0)
         for key in res.keys():
@@ -808,8 +814,10 @@ class ev_ssm():
             else:
                 self.r_agc(Pi=0)
             # --- revise control ---
-            # `CS` for low charged EVs
+            # `CS` for low charged EVs, and set 'lc' to 1
             self.ev['c'] = self.ev[['soc', 'c']].apply(
+                lambda x: 1 if x[0] <= self.sl else x[1], axis=1)
+            self.ev['lc'] = self.ev[['soc', 'c']].apply(
                 lambda x: 1 if x[0] <= self.sl else x[1], axis=1)
             self.ev['mod'] = self.ev[['soc', 'c']].apply(
                 lambda x: 1 if x[0] <= self.sl else 0, axis=1)
@@ -821,6 +829,8 @@ class ev_ssm():
                 lambda x: 0 if (x[0] >= 0.96) & (x[1] == 1) else x[1], axis=1)
             self.ev['mod'] = self.ev[['soc', 'c', 'socd']].apply(
                 lambda x: 1 if (x[0] >= 0.96) & (x[1] == 1) else 0, axis=1)
+            # TODO: 'LC' for nr EVs
+
         # `IS` for offline EVs
         self.ev['c'] = self.ev[['c', 'u']].apply(
             lambda x: x[0]*x[1], axis=1)
@@ -1095,14 +1105,14 @@ class ev_ssm():
                 pv = vs[i_sx]
                 if (us[-1] == 1) & (vs[-1] == 1):
                     for i in range(len(self.rho)):
-                        su = np.sum([m*n for m,n in zip(self.rho[0:i], usp[i_sx, 0:i])])
-                        sv = np.sum([m*n for m,n in zip(self.rho[0:i], vsp[i_sx, 0:i])])
+                        su = np.sum([m*n for m, n in zip(self.rho[0:i], usp[i_sx, 0:i])])
+                        sv = np.sum([m*n for m, n in zip(self.rho[0:i], vsp[i_sx, 0:i])])
                         usp[i_sx, i] = max(min((pu-su)/self.rho[i], 1), 0)
                         vsp[i_sx, i] = max(min((pv-sv)/self.rho[i], 1), 0)
                 if (us[-1] == -1) & (vs[-1] == -1):
                     for i in range(len(self.rho)-1, -1, -1):
-                        su = np.sum([m*n for m,n in zip(self.rho[i+1:], usp[i_sx, i+1:])])
-                        sv = np.sum([m*n for m,n in zip(self.rho[i+1:], vsp[i_sx, i+1:])])
+                        su = np.sum([m*n for m, n in zip(self.rho[i+1:], usp[i_sx, i+1:])])
+                        sv = np.sum([m*n for m, n in zip(self.rho[i+1:], vsp[i_sx, i+1:])])
                         usp[i_sx, i] = max(min((pu-su)/self.rho[i], 1), 0)
                         vsp[i_sx, i] = max(min((pv-sv)/self.rho[i], 1), 0)
 
