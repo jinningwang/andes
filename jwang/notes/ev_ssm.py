@@ -841,12 +841,14 @@ class ev_ssm():
             # `CS` for just arrived EVs
             self.ev['c'] = self.ev[['u0', 'u', 'c']].apply(
                 lambda x: 1 if (x[0] == 0) & (x[1] == 1) else x[2], axis=1)
+            # `CS` for lc
+            self.ev['c'] = self.ev[['u', 'lc', 'c']].apply(
+                lambda x: 1 if (x[0] == 1) & (x[1] == 1) else x[2], axis=1)
             # `IS` for demanded charging [96%:x[2]] SoC EVs
             self.ev['c'] = self.ev[['soc', 'c', 'socd']].apply(
-                lambda x: 0 if (x[0] >= 0.96) & (x[1] == 1) else x[1], axis=1)
+                lambda x: 0 if (x[0] >= x[2]) & (x[1] == 1) else x[1], axis=1)
             self.ev['mod'] = self.ev[['soc', 'c', 'socd']].apply(
                 lambda x: 1 if (x[0] >= 0.96) & (x[1] == 1) else 0, axis=1)
-            # TODO: 'LC' for nr EVs
 
         # `IS` for offline EVs
         self.ev['c'] = self.ev[['c', 'u']].apply(
@@ -1149,6 +1151,10 @@ class ev_ssm():
             if abs(error0 - error) < 0.005:
                 break
         self.ev['agc'] = c0 - self.ev.c
+        # number of actions
+        self.ev['na'] += (self.ev['soc'] < self.ev['socd']) - self.ev['c']
+        self.ev['lc'] = self.ev['na'] > self.ev['nam']
+        self.ev['lc'] = self.ev['lc'].astype(int)
         self.uv = [u, v, us, vs, usp, vsp]
         # TODO: ps array
         self.usp = np.repeat(us[0:self.Ns].reshape(self.Ns, 1),
