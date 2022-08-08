@@ -195,7 +195,8 @@ class ev_ssm():
 
     def __init__(self, ts=0, N=10000, step=1, tp=100,
                  lr=0.1, lp=100, seed=None, name="EVA",
-                 n_pref=4, is_report=True):
+                 n_pref=1, is_report=True,
+                 tt_mean=0.5, tt_var=0.02, tt_lb=0, tt_ub=1):
         """
         Note:
 
@@ -227,7 +228,7 @@ class ev_ssm():
         n_pref: int
             Number of pereference level, n_pref >= 1.
         is_report: bool
-            Passed to ``report()``, True to report EVA info.
+            Paselfd to ``report()``, True to report EVA info.
         """
         # --- 1. init ---
         self.name = name
@@ -248,10 +249,10 @@ class ev_ssm():
                                socl=0, socu=1)
         #  --- 1b. normal distribution parameters range ---
         self.ev_pdf_name = ['soci', 'socd', 'ts1', 'ts2', 'tf1', 'tf2', 'tt']
-        self.ev_pdf_data = {'mean': [0.3,    0.8,    -6.5,  17.5,   8.9,  32.9, 0.2],
-                            'var': [0.05,   0.03,   3.4,   3.4,    3.4,  3.4, 0.05],
-                            'lb': [0.2,    0.7,    0.0,   5.5,    0.0,  20.9, 0],
-                            'ub': [0.4,    0.9,    5.5,   24.0,   20.9, 24.0, 1],
+        self.ev_pdf_data = {'mean': [0.3,    0.8,    -6.5,  17.5,   8.9,  32.9, tt_mean],
+                            'var': [0.05,   0.03,   3.4,   3.4,    3.4,  3.4, tt_var],
+                            'lb': [0.2,    0.7,    0.0,   5.5,    0.0,  20.9, tt_lb],
+                            'ub': [0.4,    0.9,    5.5,   24.0,   20.9, 24.0, tt_ub],
                             'info':  ['initial SoC', 'demanded SoC',
                                       'start charging time 1', 'start charging time 2',
                                       'finish charging time 1', 'finish charging time 2',
@@ -353,7 +354,8 @@ class ev_ssm():
             self.ev[col] = stats.truncnorm(
                 (ev_pdf[col]['lb'] - ev_pdf[col]['mean']) / ev_pdf[col]['var'],
                 (ev_pdf[col]['ub'] - ev_pdf[col]['mean']) / ev_pdf[col]['var'],
-                loc=ev_pdf[col]['mean'], scale=ev_pdf[col]['var']).rvs(self.N)
+                loc=ev_pdf[col]['mean'], scale=ev_pdf[col]['var']).rvs(self.N,
+                                                                       random_state=self.seed)
 
         # ts1, ts2, tf1, tf2
         et = self.ev.copy()
@@ -429,6 +431,21 @@ class ev_ssm():
         self.ev = self.ev[ev_cols]
         self.ev['agc'] = 0  # `agc` is indicator of participation of AGC
         self.ev['mod'] = 0  # `mod` is indicator of modified of over or under charge
+
+        # number of actions
+        self.ev['na'] = stats.truncnorm((-2000 - 400 * (self.ev['tf'] - ts)) / (self.ev['soci'] * 100),
+                                        (8000 - 400 * (self.ev['tf'] - ts)) / (self.ev['soci'] * 100),
+                                        loc=400 * (self.ev['tf'] - ts), scale=self.ev['soci'] * 100).rvs(self.ev.shape[0],
+                                                                                                         random_state=self.seed)
+        self.ev['na'] = self.ev['na'].astype(int)
+
+        # max number of actions
+        self.ev['nam'] = ((self.ev['tf'].mean() - self.ev['ts'].mean()) * self.ev['Pc'].mean() * self.ev['nc'].mean()
+                          - self.ev['socd'] * self.ev['Q']) / (self.ev['Pc'].mean() * self.ev['nc'].mean() * 4 / 3600)
+        self.ev['nam'] = self.ev['nam'].astype(int)
+        # TODO: fix warning
+        self.ev['na'][self.ev['na'] > self.ev['nam']] = self.ev['nam'][self.ev['na'] > self.ev['nam']]
+
         self.g_BCD()
         self.n_step = 1
         # --- drop EVs that are not in time range ---
