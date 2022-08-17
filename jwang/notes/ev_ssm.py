@@ -283,6 +283,7 @@ class ev_ssm():
         # --- output: estimated FRC ---
         self.prumax = 0
         self.prdmax = 0
+        self.g_u()
         self.g_frc()
 
         # --- adaptive soc coeff ---
@@ -392,6 +393,7 @@ class ev_ssm():
         self.ev['soc'] = self.ev['soc'].apply(lambda x: max(x, self.socl))
         self.ev['bd'] = self.ev.soc.apply(lambda x: 1 if (x <= self.sl) | (x >= self.su) else 0)
 
+        self.ev['lc'] = 0  # low charge, 0 for regular, 1 for low charge
         # --- ev online status: u0 as u ---
         self.ev['u0'] = 0
         self.g_u()
@@ -405,7 +407,6 @@ class ev_ssm():
         self.ev['c'] = self.ev[['soc', 'c', 'socd']].apply(
             lambda x: 0 if (x[0] >= x[2]) & (x[1] == 1) else x[1], axis=1)
         self.ev[['c', 'c2', 'c0']] = self.ev[['c', 'c2', 'c0']].astype(int)
-        self.ev['lc'] = 0  # low charge, 0 for regular, 1 for low charge
 
         self.find_sx()
         self.g_x()
@@ -413,7 +414,7 @@ class ev_ssm():
 
         # initialize x series
         self.ev['xl'] = [[[], [], []]] * self.N
-        self.ne = self.ev.u.sum()
+        self.ne = self.ev.u.sum()  # number of online EVs
 
         # pereference
         # Note: pereference is chosen from a list [0, 1, 2, n_pref]
@@ -445,6 +446,9 @@ class ev_ssm():
         self.ev['nam'] = self.ev['nam'].astype(int)
         # TODO: fix warning
         self.ev['na'][self.ev['na'] > self.ev['nam']] = self.ev['nam'][self.ev['na'] > self.ev['nam']]
+        self.ev['lc'][self.ev['na'] >= self.ev['nam']] = 1
+        self.g_u()
+        # self.neo = self.ev.u.sum() - self.ev.lc.sum()  # numebr of online EVs with lc == 0
 
         self.g_BCD()
         self.n_step = 1
@@ -465,6 +469,7 @@ class ev_ssm():
         self.ev['u'] = (self.ev.ts <= self.ts) & (self.ev.tf >= self.ts)
         self.ev['u'] = self.ev['u'].astype(int)
         self.ne = self.ev.u.sum()
+        self.neo = self.ne - self.ev.lc.sum()
         return True
 
     def g_x(self):
@@ -500,7 +505,7 @@ class ev_ssm():
         self.xtab.fillna(0, inplace=True)
 
         # TODO: use estimated ne rather than actual ne?
-        self.rtab = self.xtab.div(self.ne)
+        self.rtab = self.xtab.div(self.neo)
         return True
 
     def save_A(self, csv):
@@ -834,8 +839,8 @@ class ev_ssm():
             # `CS` for low charged EVs, and set 'lc' to 1
             self.ev['c'] = self.ev[['soc', 'c']].apply(
                 lambda x: 1 if x[0] <= self.sl else x[1], axis=1)
-            self.ev['lc'] = self.ev[['soc', 'c']].apply(
-                lambda x: 1 if x[0] <= self.sl else x[1], axis=1)
+            self.ev['lc'] = self.ev[['soc', 'c', 'lc']].apply(
+                lambda x: 1 if x[0] <= self.sl else x[2], axis=1)
             self.ev['mod'] = self.ev[['soc', 'c']].apply(
                 lambda x: 1 if x[0] <= self.sl else 0, axis=1)
             # `CS` for just arrived EVs
@@ -919,6 +924,7 @@ class ev_ssm():
         self.g_x()
         self.r_state()
         self.ne = self.ev.u.sum()
+        self.neo = self.ev.u.sum() - self.ev.neo.sum()
         self.n_step = 1
         logger.warning(f"{self.name}: Reset to {self.ts}[H]")
         self.report()
@@ -1013,9 +1019,9 @@ class ev_ssm():
         # self.prdmax = min((1 - self.wsoc) * self.wQ / T, RD)
         # --- SSM FRC is not that reasonable ---
         if not nea:
-            nea = self.ne
-        self.prumax = RU * nea / self.ne
-        self.prdmax = RD * nea / self.ne
+            nea = self.neo
+        self.prumax = RU * nea / self.ne * self.neo / self.ne
+        self.prdmax = RD * nea / self.ne * self.neo / self.ne
         return [self.prumax, self.prdmax]
 
     def g_BCD(self):
@@ -1144,7 +1150,7 @@ class ev_ssm():
             self.y = self.ep()[0]   # self.Pt
             # dx0 = np.matmul(self.B, u) + np.matmul(self.C, v)
             # self.Pr = np.matmul(self.D, dx0)[0]
-            self.Pr += np.matmul(self.ne * self.D,
+            self.Pr += np.matmul(self.neo * self.D,
                                  np.matmul(self.B, u) + np.matmul(self.C, v))[0]
             error = Pi_cap - self.Pr
             iter += 1
@@ -1153,7 +1159,7 @@ class ev_ssm():
         self.ev['agc'] = c0 - self.ev.c
         # number of actions
         self.ev['na'] += (self.ev['soc'] < self.ev['socd']) - self.ev['c']
-        self.ev['lc'] = self.ev['na'] > self.ev['nam']
+        self.ev['lc'] = self.ev['na'] >= self.ev['nam']
         self.ev['lc'] = self.ev['lc'].astype(int)
         self.uv = [u, v, us, vs, usp, vsp]
         # TODO: ps array
@@ -1198,7 +1204,7 @@ class ev_ssm():
 
         if Pi >= deadband:  # deadband0:  # RegUp
             # --- step I ---
-            ru = min(Pi, self.Pa) / (self.Pave * self.ne)  # total RegUp power
+            ru = min(Pi, self.Pa) / (self.Pave * self.neo)  # total RegUp power
             u = np.zeros(self.Ns)   # C->I
             v = np.zeros(self.Ns)   # I->D
             for j in range(self.Ns):
@@ -1215,13 +1221,13 @@ class ev_ssm():
 
         elif Pi <= -deadband:  # RegDn
             # --- step I ---
-            rv = max(Pi, self.Pc) / (self.Pave * self.ne)
+            rv = max(Pi, self.Pc) / (self.Pave * self.neo)
             v = np.zeros(self.Ns)
             for j in range(self.Ns):
                 a = rv + np.sum(x[2*self.Ns: 2*self.Ns+j])
                 v[j] = max(min(a, 0), -1 * x[j+2*self.Ns])
 
-            ru = min(Pi-self.Pc, 0) / (self.Pave * self.ne)
+            ru = min(Pi-self.Pc, 0) / (self.Pave * self.neo)
             u = np.zeros(self.Ns)
             for j in range(self.Ns):
                 a = ru - np.sum(v[0:j]) - np.sum(u[0:j-1])
