@@ -196,7 +196,8 @@ class ev_ssm():
     def __init__(self, ts=0, N=10000, step=1, tp=100,
                  lr=0.1, lp=100, seed=None, name="EVA",
                  n_pref=1, is_report=True,
-                 tt_mean=0.5, tt_var=0.02, tt_lb=0, tt_ub=1):
+                 tt_mean=0.5, tt_var=0.02, tt_lb=0, tt_ub=1,
+                 ict_off=False):
         """
         Note:
 
@@ -228,7 +229,9 @@ class ev_ssm():
         n_pref: int
             Number of pereference level, n_pref >= 1.
         is_report: bool
-            Paselfd to ``report()``, True to report EVA info.
+            Passed to ``report()``, True to report EVA info.
+        ict_off: bool
+            True to disable increasing charging time control.
         """
         # --- 1. init ---
         self.name = name
@@ -241,6 +244,7 @@ class ev_ssm():
         self.seed = seed
         np.random.seed(self.seed)
         self.n_pref = n_pref
+        self.ict_off = ict_off
         # --- 1a. uniform distribution parameters range ---
         self.ev_ufparam = dict(Ns=20,
                                Pl=5.0, Pu=7.0,
@@ -447,6 +451,8 @@ class ev_ssm():
         # TODO: fix warning
         self.ev['na'][self.ev['na'] > self.ev['nam']] = self.ev['nam'][self.ev['na'] > self.ev['nam']]
         self.ev['lc'][self.ev['na'] >= self.ev['nam']] = 1
+        if self.ict_off:
+            self.ev['lc'] = 0
         self.g_u()
         # self.neo = self.ev.u.sum() - self.ev.lc.sum()  # numebr of online EVs with lc == 0
 
@@ -548,17 +554,17 @@ class ev_ssm():
             Plt style.
         """
         plt.style.use(style)
-        fig, ax = plt.subplots(1, 1, figsize=figsize)
-        ax.plot(self.tss, self.Prl, label="Control")
-        ax.plot(self.tss, self.Prcl, label="Response")
+        fig_agc, ax_agc = plt.subplots(1, 1, figsize=figsize)
+        ax_agc.plot(self.tss, self.Prl, label="Control")
+        ax_agc.plot(self.tss, self.Prcl, label="Response")
 
-        ax.set_xlabel("Time [H]")
-        ax.set_ylabel("Power (MW)")
-        ax.set_title(f"AGC response")
-        ax.set_xlim(self.tss[0], self.tss[-1])
-        ax.grid()
-        ax.legend()
-        return fig, ax
+        ax_agc.set_xlabel("Time [H]")
+        ax_agc.set_ylabel("Power (MW)")
+        ax_agc.set_title(f"AGC response")
+        ax_agc.set_xlim(self.tss[0], self.tss[-1])
+        ax_agc.grid()
+        ax_agc.legend()
+        return fig_agc, ax_agc
 
     def plot(self, figsize=(6, 3), style='default'):
         """
@@ -572,24 +578,24 @@ class ev_ssm():
             Plt style.
         """
         plt.style.use(style)
-        fig, ax = plt.subplots(1, 1, figsize=figsize)
-        p1 = ax.plot(self.tss, self.Ptl, label="Total")
-        p2 = ax.plot(self.tss, self.Pcl, label="Charging")
-        p3 = ax.plot(self.tss, self.Pdl, label="Discharging")
-        ax2 = ax.twinx()
+        fig_ev, ax_ev = plt.subplots(1, 1, figsize=figsize)
+        p1 = ax_ev.plot(self.tss, self.Ptl, label="Total")
+        p2 = ax_ev.plot(self.tss, self.Pcl, label="Charging")
+        p3 = ax_ev.plot(self.tss, self.Pdl, label="Discharging")
+        ax2 = ax_ev.twinx()
         p4 = ax2.plot(self.tss, self.nel, label='Online EVs', color='orange')
         ax2.set_ylabel("Number")
 
-        ax.set_xlabel("Time [H]")
-        ax.set_ylabel("Power (MW)")
-        ax.set_title(f"{self.name}")
-        ax.set_xlim(self.tss[0], self.tss[-1])
-        ax.grid()
+        ax_ev.set_xlabel("Time [H]")
+        ax_ev.set_ylabel("Power (MW)")
+        ax_ev.set_title(f"{self.name}")
+        ax_ev.set_xlim(self.tss[0], self.tss[-1])
+        ax_ev.grid()
 
         lns = p1 + p2 + p3 + p4
         labels = [l.get_label() for l in lns]
         plt.legend(lns, labels)
-        return fig, ax
+        return fig_ev, ax_ev
 
     def test(self, tf=9.05):
         """
@@ -1160,6 +1166,8 @@ class ev_ssm():
         # number of actions
         self.ev['na'] += (self.ev['soc'] < self.ev['socd']) - self.ev['c']
         self.ev['lc'] = self.ev['na'] >= self.ev['nam']
+        if self.ict_off:
+            self.ev['lc'] = 0
         self.ev['lc'] = self.ev['lc'].astype(int)
         self.uv = [u, v, us, vs, usp, vsp]
         # TODO: ps array
