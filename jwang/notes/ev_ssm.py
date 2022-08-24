@@ -457,7 +457,7 @@ class ev_ssm():
         if self.ict_off:
             self.ev['lc'] = 0
         self.g_u()
-        # self.neo = self.ev.u.sum() - self.ev.lc.sum()  # numebr of online EVs with lc == 0
+        # self.nec = self.ev.u.sum() - self.ev.lc.sum()  # numebr of online EVs with lc == 0
 
         self.g_BCD()
         self.n_step = 1
@@ -477,8 +477,9 @@ class ev_ssm():
         self.ev['u0'] = self.ev.u.astype(int)
         self.ev['u'] = (self.ev.ts <= self.ts) & (self.ev.tf >= self.ts)
         self.ev['u'] = self.ev['u'].astype(int)
-        self.ne = self.ev.u.sum()
-        self.neo = self.ne - self.ev.lc.sum()
+        self.ne = self.ev.u.sum()  # number of online EVs
+        # number of online and non low-charge EVs
+        self.nec = self.ev[(self.ev['lc']==0) & (self.ev['u']==1)].shape[0]
         return True
 
     def g_x(self):
@@ -514,7 +515,7 @@ class ev_ssm():
         self.xtab.fillna(0, inplace=True)
 
         # TODO: use estimated ne rather than actual ne?
-        self.rtab = self.xtab.div(self.neo)
+        self.rtab = self.xtab.div(self.nec)
         return True
 
     def save_A(self, csv):
@@ -559,7 +560,7 @@ class ev_ssm():
             Time unit, 'h' for hour, 's' for second.
         """
         plt.style.use(style)
-        fig_agc, ax_agc = plt.subplots(1, 1, figsize=figsize)
+        fig_agc, ax_agc = plt.subplots(figsize=figsize)
         
         if tu == 's':
             tss = [3600*(ts - self.tss[0]) for ts in self.tss]
@@ -592,7 +593,7 @@ class ev_ssm():
             Time unit, 'h' for hour, 's' for second.
         """
         plt.style.use(style)
-        fig_ev, ax_ev = plt.subplots(1, 1, figsize=figsize)
+        fig_ev, ax_ev = plt.subplots(figsize=figsize)
         if tu == 's':
             tss = [3600*(ts - self.tss[0]) for ts in self.tss]
             xlabel = 'Time [s]'
@@ -716,7 +717,7 @@ class ev_ssm():
         Parameters
         ----------
         tf: int
-            end time [H]
+            running time [H]
         Pi: float
             AGC input signal (MW)
         is_update: bool
@@ -735,7 +736,7 @@ class ev_ssm():
             logger.warning(f"{self.name}: end time {tf}[H] is too close to start time {self.ts}[H],"
                            "simulation will not start.")
         else:
-            for t in tqdm(np.arange(self.ts, tf + t_step, t_step), desc=f'{self.name} MCS', disable=disable):
+            for t in tqdm(np.arange(self.ts, tf + 0.1/3600, t_step), desc=f'{self.name} MCS', disable=disable):
                 if abs(t - self.ts) < 1e-6:
                     continue
                 # --- update SSM A ---
@@ -956,7 +957,7 @@ class ev_ssm():
         self.g_x()
         self.r_state()
         self.ne = self.ev.u.sum()
-        self.neo = self.ev.u.sum() - self.ev.neo.sum()
+        self.nec = self.ev.u.sum() - self.ev.neo.sum()
         self.n_step = 1
         logger.warning(f"{self.name}: Reset to {self.ts}[H]")
         self.report()
@@ -1051,9 +1052,9 @@ class ev_ssm():
         # self.prdmax = min((1 - self.wsoc) * self.wQ / T, RD)
         # --- SSM FRC is not that reasonable ---
         if not nea:
-            nea = self.neo
-        self.prumax = RU * nea / self.ne * self.neo / self.ne
-        self.prdmax = RD * nea / self.ne * self.neo / self.ne
+            nea = self.nec
+        self.prumax = RU * nea / self.ne * self.nec / self.ne
+        self.prdmax = RD * nea / self.ne * self.nec / self.ne
         return [self.prumax, self.prdmax]
 
     def g_BCD(self):
@@ -1178,11 +1179,11 @@ class ev_ssm():
             self.y = self.ep()[0]   # self.Pt
             # dx0 = np.matmul(self.B, u) + np.matmul(self.C, v)
             # self.Pr = np.matmul(self.D, dx0)[0]
-            self.Pr += np.matmul(self.neo * self.D,
+            self.Pr += np.matmul(self.nec * self.D,
                                  np.matmul(self.B, u) + np.matmul(self.C, v))[0]
             error = Pi - self.Pr
             iter += 1
-            if abs(error0 - error) < 0.005:
+            if abs(error0 - error) < 0.005:  # tolerante of control error
                 break
         self.ev['agc'] = c0 - self.ev.c
 
@@ -1237,7 +1238,7 @@ class ev_ssm():
 
         if Pi >= deadband:  # deadband0:  # RegUp
             # --- step I ---
-            ru = min(Pi, self.Pa) / (self.Pave * self.neo)  # total RegUp power
+            ru = min(Pi, self.Pa) / (self.Pave * self.nec)  # total RegUp power
             u = np.zeros(self.Ns)   # C->I
             v = np.zeros(self.Ns)   # I->D
             for j in range(self.Ns):
@@ -1254,13 +1255,13 @@ class ev_ssm():
 
         elif Pi <= -deadband:  # RegDn
             # --- step I ---
-            rv = max(Pi, self.Pc) / (self.Pave * self.neo)
+            rv = max(Pi, self.Pc) / (self.Pave * self.nec)
             v = np.zeros(self.Ns)
             for j in range(self.Ns):
                 a = rv + np.sum(x[2*self.Ns: 2*self.Ns+j])
                 v[j] = max(min(a, 0), -1 * x[j+2*self.Ns])
 
-            ru = min(Pi-self.Pc, 0) / (self.Pave * self.neo)
+            ru = min(Pi-self.Pc, 0) / (self.Pave * self.nec)
             u = np.zeros(self.Ns)
             for j in range(self.Ns):
                 a = ru - np.sum(v[0:j]) - np.sum(u[0:j-1])
