@@ -730,12 +730,12 @@ class ev_ssm():
         disable: bool
             tqdm progress bar
         """
-        t_step = self.step / 3600
+        t_step = self.step / 3600  # t_step is in hours
         if tf - self.ts < 1e-5:
             logger.warning(f"{self.name}: end time {tf}[H] is too close to start time {self.ts}[H],"
                            "simulation will not start.")
         else:
-            for t in tqdm(np.arange(self.ts, tf, t_step), desc=f'{self.name} MCS', disable=disable):
+            for t in tqdm(np.arange(self.ts, tf + t_step, t_step), desc=f'{self.name} MCS', disable=disable):
                 if abs(t - self.ts) < 1e-6:
                     continue
                 # --- update SSM A ---
