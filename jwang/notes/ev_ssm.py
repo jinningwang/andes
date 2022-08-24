@@ -17,12 +17,12 @@ def r_agc_sev(evs, us, vs, usp, vsp):
 
     evs columns:
     ['u', 'c', 'sx', 'pref']
-      0,    1,    2,     3
+      0,   1,   2,    3
     """
     ctrl = evs[1]
     if evs[0] == 0:  # offline
         ctrl = 0
-    elif us[-1]*vs[-1] == 0:  # no AGC
+    elif us[-1]*vs[-1] == 0:  # no AGC or low charging
         ctrl = evs[1]
     elif evs[0] == 1:  # online
         if (evs[1] == 0) & (vs[-1] == 1):  # response with vs1 [I to D]
@@ -197,7 +197,7 @@ class ev_ssm():
                  lr=0.1, lp=100, seed=None, name="EVA",
                  n_pref=1, is_report=True,
                  tt_mean=0.5, tt_var=0.02, tt_lb=0, tt_ub=1,
-                 ict_off=False):
+                 ict_off=False, ecc_off=False):
         """
         Note:
 
@@ -232,6 +232,8 @@ class ev_ssm():
             Passed to ``report()``, True to report EVA info.
         ict_off: bool
             True to disable increasing charging time control.
+        ecc_off:
+            True to disable error correction.
         """
         # --- 1. init ---
         self.name = name
@@ -245,6 +247,7 @@ class ev_ssm():
         np.random.seed(self.seed)
         self.n_pref = n_pref
         self.ict_off = ict_off
+        self.ecc_off = ecc_off
         # --- 1a. uniform distribution parameters range ---
         self.ev_ufparam = dict(Ns=20,
                                Pl=5.0, Pu=7.0,
@@ -272,9 +275,9 @@ class ev_ssm():
         self.Pdl = [self.Pdc]
 
         self.ep()
-        self.Pr = 0  # estimated response to AGC
+        self.Pr = 0  # estimated AGC response power
         self.Prl = [self.Pr]
-        self.Prc = 0  # calculated response to AGC
+        self.Prc = 0  # actual AGC response power
         self.Prcl = [self.Prc]
         self.Per = 0  # error of AGC power
         self.Perl = [self.Per]
@@ -542,7 +545,7 @@ class ev_ssm():
         self.A = pd.read_csv(csv).values
         logger.warning(f'{self.name}: Load A from %s.' % csv)
 
-    def plot_agc(self, figsize=(6, 3), style='default'):
+    def plot_agc(self, figsize=(6, 3), style='default', tu='h'):
         """
         Plot the AGC results.
 
@@ -552,21 +555,30 @@ class ev_ssm():
             Figure size.
         style: str
             Plt style.
+        tu: str
+            Time unit, 'h' for hour, 's' for second.
         """
         plt.style.use(style)
         fig_agc, ax_agc = plt.subplots(1, 1, figsize=figsize)
-        ax_agc.plot(self.tss, self.Prl, label="Control")
-        ax_agc.plot(self.tss, self.Prcl, label="Response")
+        
+        if tu == 's':
+            tss = [3600*(ts - self.tss[0]) for ts in self.tss]
+            xlabel = 'Time [s]'
+        elif tu == 'h':
+            tss = self.tss
+            xlabel = 'Time [H]'
+        ax_agc.plot(tss, self.Prl, label="Control")
+        ax_agc.plot(tss, self.Prcl, label="Response")
 
-        ax_agc.set_xlabel("Time [H]")
+        ax_agc.set_xlabel(xlabel)
         ax_agc.set_ylabel("Power (MW)")
         ax_agc.set_title(f"AGC response")
-        ax_agc.set_xlim(self.tss[0], self.tss[-1])
+        ax_agc.set_xlim(tss[0], tss[-1])
         ax_agc.grid()
         ax_agc.legend()
         return fig_agc, ax_agc
 
-    def plot(self, figsize=(6, 3), style='default'):
+    def plot(self, figsize=(6, 3), style='default', tu='h'):
         """
         Plot the results.
 
@@ -576,20 +588,28 @@ class ev_ssm():
             Figure size.
         style: str
             Plt style.
+        tu: str
+            Time unit, 'h' for hour, 's' for second.
         """
         plt.style.use(style)
         fig_ev, ax_ev = plt.subplots(1, 1, figsize=figsize)
-        p1 = ax_ev.plot(self.tss, self.Ptl, label="Total")
-        p2 = ax_ev.plot(self.tss, self.Pcl, label="Charging")
-        p3 = ax_ev.plot(self.tss, self.Pdl, label="Discharging")
+        if tu == 's':
+            tss = [3600*(ts - self.tss[0]) for ts in self.tss]
+            xlabel = 'Time [s]'
+        elif tu == 'h':
+            tss = self.tss
+            xlabel = 'Time [H]'
+        p1 = ax_ev.plot(tss, self.Ptl, label="Total")
+        p2 = ax_ev.plot(tss, self.Pcl, label="Charging")
+        p3 = ax_ev.plot(tss, self.Pdl, label="Discharging")
         ax2 = ax_ev.twinx()
-        p4 = ax2.plot(self.tss, self.nel, label='Online EVs', color='orange')
+        p4 = ax2.plot(tss, self.nel, label='Online EVs', color='orange')
         ax2.set_ylabel("Number")
 
-        ax_ev.set_xlabel("Time [H]")
+        ax_ev.set_xlabel(xlabel)
         ax_ev.set_ylabel("Power (MW)")
         ax_ev.set_title(f"{self.name}")
-        ax_ev.set_xlim(self.tss[0], self.tss[-1])
+        ax_ev.set_xlim(tss[0], tss[-1])
         ax_ev.grid()
 
         lns = p1 + p2 + p3 + p4
@@ -725,13 +745,17 @@ class ev_ssm():
                     if is_rstate:
                         self.r_state()
                         self.Per = self.Prc - self.Pr  # error of AGC response
-                        # self.Per = 0  # turn off the error correction
                     self.report(is_report=False)
 
                 self.ts = self.g_ts(t)
                 self.g_u()  # update online status
                 # TODO: add warning when Pi is 0
-                self.g_c(Pi=Pi - self.Per, is_test=is_test)  # update control signal
+                if Pi >= 0:
+                    Pi_cap = min(Pi, self.prumax)
+                elif Pi < 0:
+                    Pi_cap = max(Pi, -1*self.prdmax)
+                Pi_input = Pi_cap - (1 - self.ecc_off) * self.Per
+                self.g_c(Pi=Pi_input, is_test=is_test)  # update control signal
                 # --- update soc interval and online status ---
                 # charging/discharging power, kW
                 self.ev['dP'] = self.ev[['Pc', 'Pd', 'nc', 'nd', 'c', 'u']].apply(
@@ -750,9 +774,10 @@ class ev_ssm():
 
                 # record power
                 self.report(is_report=False)
-                # Actual AGC response: AGC switched power if not modified
-                self.Prc += np.sum(self.ev.agc * self.ev.Pc * (1 - self.ev['mod'])) * 1e-3  # to MW
-                self.Prl.append(self.Pr + self.Per)
+                # Actual AGC response: AGC switched power if not modified. (MW)
+                self.Prc += np.sum(self.ev.agc * self.ev.Pc * (1 - self.ev['mod'])) * 1e-3
+                # NOTE: error is not considered as part of the control signal
+                self.Prl.append(Pi_cap)
                 self.Perl.append(self.Per)
                 self.Prcl.append(self.Prc)
                 self.Ptl.append(self.Ptc)
@@ -843,10 +868,11 @@ class ev_ssm():
                 self.r_agc(Pi=0)
             # --- revise control ---
             # `CS` for low charged EVs, and set 'lc' to 1
-            self.ev['c'] = self.ev[['soc', 'c']].apply(
-                lambda x: 1 if x[0] <= self.sl else x[1], axis=1)
+            # self.ev['lc'] = self.ev['lc'].astype(bool)
             self.ev['lc'] = self.ev[['soc', 'c', 'lc']].apply(
                 lambda x: 1 if x[0] <= self.sl else x[2], axis=1)
+            self.ev['c'] = self.ev[['c', 'lc']].apply(
+                lambda x: 1 if x[1] else x[0], axis=1)
             self.ev['mod'] = self.ev[['soc', 'c']].apply(
                 lambda x: 1 if x[0] <= self.sl else 0, axis=1)
             # `CS` for just arrived EVs
@@ -859,7 +885,7 @@ class ev_ssm():
             self.ev['c'] = self.ev[['soc', 'c', 'socd']].apply(
                 lambda x: 0 if (x[0] >= x[2]) & (x[1] == 1) else x[1], axis=1)
             self.ev['mod'] = self.ev[['soc', 'c', 'socd']].apply(
-                lambda x: 1 if (x[0] >= 0.96) & (x[1] == 1) else 0, axis=1)
+                lambda x: 1 if (x[0] >= x[2]) & (x[1] == 1) else 0, axis=1)
 
         # `IS` for offline EVs
         self.ev['c'] = self.ev[['c', 'u']].apply(
@@ -1110,10 +1136,6 @@ class ev_ssm():
         vs: numpy.NDArray
             vector `vs`, (Ns+1,); probability mode (b), (c): IS - DS
         """
-        if Pi >= 0:
-            Pi_cap = min(Pi, self.prumax)
-        elif Pi < 0:
-            Pi_cap = max(Pi, -1*self.prdmax)
         # initialize output
         u = np.zeros(self.Ns)
         v = np.zeros(self.Ns)
@@ -1122,12 +1144,12 @@ class ev_ssm():
         usp = np.repeat(us.reshape(self.Ns+1, 1), self.n_pref, axis=1)
         vsp = np.repeat(vs.reshape(self.Ns+1, 1), self.n_pref, axis=1)
         # corrected control
-        error = Pi_cap - self.Pr
+        error = Pi - self.Pr
         iter = 0
         c0 = self.ev.c.copy()
         while (abs(error) >= 0.005) & (iter < 10):
             error0 = error
-            u, v, us, vs = self.g_agc(Pi_cap - self.Pr)
+            u, v, us, vs = self.g_agc(Pi - self.Pr)
             # pereference signal
             usp = np.repeat(us.reshape(self.Ns+1, 1), self.n_pref, axis=1)
             vsp = np.repeat(vs.reshape(self.Ns+1, 1), self.n_pref, axis=1)
@@ -1158,17 +1180,20 @@ class ev_ssm():
             # self.Pr = np.matmul(self.D, dx0)[0]
             self.Pr += np.matmul(self.neo * self.D,
                                  np.matmul(self.B, u) + np.matmul(self.C, v))[0]
-            error = Pi_cap - self.Pr
+            error = Pi - self.Pr
             iter += 1
             if abs(error0 - error) < 0.005:
                 break
         self.ev['agc'] = c0 - self.ev.c
+
         # number of actions
         self.ev['na'] += (self.ev['soc'] < self.ev['socd']) - self.ev['c']
-        self.ev['lc'] = self.ev['na'] >= self.ev['nam']
-        if self.ict_off:
-            self.ev['lc'] = 0
+        if not self.ict_off:
+            lc0 = self.ev['lc'].copy().astype(bool)
+            self.ev['lc'] = self.ev['na'] >= self.ev['nam']
+            self.ev['lc'] = self.ev['lc'] | lc0  # once lc, never response again
         self.ev['lc'] = self.ev['lc'].astype(int)
+
         self.uv = [u, v, us, vs, usp, vsp]
         # TODO: ps array
         self.usp = np.repeat(us[0:self.Ns].reshape(self.Ns, 1),
