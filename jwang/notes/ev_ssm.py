@@ -11,13 +11,32 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+# --- Functions ---
 def r_agc_sev(evs, us, vs, usp, vsp):
     """
-    Single EV reaction `ev.c` to ctrl signal `us` `vs`.
+    Single EV reacts to AGC control signal `us` `vs`.
+    
+    Parameters
+    ----------
+    evs: list
+        Single EV information, ['u', 'c', 'sx', 'pref']
+    u: numpy.ndarray
+        SSM vector `u`, (Ns,); mode (a), (d): CS - IS
+    v: numpy.ndarray
+        SSM vector `v`, (Ns,); mode (b), (c): IS - DS
+    us: numpy.ndarray
+        SSM vector `us`, (Ns+1,); probability mode (a), (d): CS - IS
+    vs: numpy.ndarray
+        SSM vector `vs`, (Ns+1,); probability mode (b), (c): IS - DS
+    usp: numpy.ndarray
+        (Ns+1, n_pref), probability mode (a), (d) with pereference: CS - IS
+    vsp: numpy.ndarray
+        (Ns+1, n_pref), probability mode (b), (c) with pereference: IS - DS
 
-    evs columns:
-    ['u', 'c', 'sx', 'pref']
-      0,   1,   2,    3
+    Returns
+    -------
+    ctrl: int
+        Single EV control signal.
     """
     ctrl = evs[1]
     if evs[0] == 0:  # offline
@@ -41,14 +60,24 @@ def r_agc_sev(evs, us, vs, usp, vsp):
             a = [evs[1]]
             p = [1]
         ctrl = np.random.choice(a=a, p=p, size=1, replace=True)[0]
-    elif evs[0] == 0:  # offline
-        ctrl = 0
     return ctrl
 
 
 def find_x(x, soc_intv):
     """
     Find soc interval of a single EV.
+    
+    Parameters
+    ----------
+    x: float
+        SOC of a single EV.
+    soc_intv: dict
+        dict of SOC intervals.
+    
+    Returns
+    -------
+    out: int
+        SOC interval of a single EV.
     """
     out = -1
     for idx in soc_intv.keys():
@@ -59,10 +88,11 @@ def find_x(x, soc_intv):
 
 def update_xl(inl_input):
     """
-    Update x series.
-    columns:
-    ['sx', 'xl', 'u', 'u0', 'c2', 'ts', 'c0', 'bd']
-      0,    1,    2,   3,    4,    5    6,    7
+    Update online staus records, x series.
+    
+    Parameters:
+    inl_input: dict
+        Single EV information, ['sx', 'xl', 'u', 'u0', 'c2', 'ts', 'c0', 'bd']
     """
     [sx, xl0, u, u0, c2, ts, c0, bd] = inl_input.copy()
     xl = xl0.copy()
@@ -93,15 +123,26 @@ def update_xl(inl_input):
 
 
 def safe_div(x, y):
+    """
+    Safe division, return 0 if y is 0.
+    
+    Parameters
+    ----------
+    x: float
+        numerator.
+    y: float
+        denominator.
+    """
     if y == 0:
         return 0
     else:
         return x/y
 
 
+# --- EV State Space Model---
 class ev_ssm():
     """
-    EV State Space Model.
+    Class of EV State Space Model.
 
     EV parameters:
     Pc, Pd, nc, nd, Q follow uniform distribution.
@@ -128,7 +169,7 @@ class ev_ssm():
         sx: SOC interval
         xl: list of lists, [[states], [sx], [t]]
     ts: float
-        current time (unit: 24H)
+        current time (in 24H)
 
     Notes
     -----
@@ -151,11 +192,19 @@ class ev_ssm():
     """
 
     def find_sx(self):
+        """
+        Find SOC interval of each EV, and update ev['sx'].
+        """
         self.ev['sx'] = self.ev['soc'].apply(lambda x: find_x(x, self.soc_intv))
 
     def report(self, is_report=True):
         """
         Report EVA info.
+        
+        Parameters
+        ----------
+        is_report: bool
+            If True, report EVA info.
         """
         # --- EV summary info ---
         self.Q = self.ev.Q.sum()/1e3
@@ -185,7 +234,13 @@ class ev_ssm():
     def g_ts(self, ts):
         """
         Update time and time series.
+        
+        Parameters
+        ----------
+        ts: float
+            current time (in 24H).
         """
+        # NOTE: tolerance is 0.1s, and large than 24 will be reduced with 24.
         if abs(ts - self.ts) < 0.1 * self.step/3600:
             logger.warning(f"{self.name}: {ts}[H] is too close to current time={self.ts} [H]")
         else:
@@ -199,14 +254,14 @@ class ev_ssm():
                  tt_mean=0.5, tt_var=0.02, tt_lb=0, tt_ub=1,
                  ict_off=False, ecc_off=False):
         """
-        Note:
-
+        Notes
+        -----
         For efficiency, the EVs that are not involved in the time range
         [``ts``, ``ts+1``] will be droped after initialization.
 
         ``n_pref`` is the number of pereference levels, lower level is
         more likely to response AGC. EVs are evenly distributed on each
-        level.
+        level. [This feature will result in control error, ]
 
         Parameters
         ----------
@@ -1129,14 +1184,18 @@ class ev_ssm():
 
         Returns
         -------
-        u: numpy.NDArray
-            vector `u`, (Ns,); mode (a), (d): CS - IS
-        v: numpy.NDArray
-            vector `v`, (Ns,); mode (b), (c): IS - DS
-        us: numpy.NDArray
-            vector `us`, (Ns+1,); probability mode (a), (d): CS - IS
-        vs: numpy.NDArray
-            vector `vs`, (Ns+1,); probability mode (b), (c): IS - DS
+        u: numpy.ndarray
+            SSM vector `u`, (Ns,); mode (a), (d): CS - IS
+        v: numpy.ndarray
+            SSM vector `v`, (Ns,); mode (b), (c): IS - DS
+        us: numpy.ndarray
+            SSM vector `us`, (Ns+1,); probability mode (a), (d): CS - IS
+        vs: numpy.ndarray
+            SSM vector `vs`, (Ns+1,); probability mode (b), (c): IS - DS
+        usp: numpy.ndarray
+            (Ns+1, n_pref), probability mode (a), (d) with pereference: CS - IS
+        vsp: numpy.ndarray
+            (Ns+1, n_pref), probability mode (b), (c) with pereference: IS - DS
         """
         # initialize output
         u = np.zeros(self.Ns)
