@@ -773,19 +773,18 @@ class ev_ssm():
                 if is_updateA:
                     self.g_xl()
 
-                # record power
-                self.report(is_report=False)
+                self.report(is_report=False)  # record power
                 # Actual AGC response: AGC switched power if not modified. (MW)
-                self.Prc += np.sum(self.ev.agc * self.ev.Pc * (1 - self.ev['mod'])) * 1e-3
+                self.Prc += np.sum(self.ev.agc * self.ev.Pc * (1 - self.ev['mod']) * (1 - self.ev['lc'])) * 1e-3
                 # NOTE: error is not considered as part of the control signal
-                self.Prl.append(Pi_cap)
                 self.Perl.append(self.Per)
-                self.Prcl.append(self.Prc)
-                self.Ptl.append(self.Ptc)
-                self.Pcl.append(self.Pcc)
-                self.Pdl.append(self.Pdc)
+                self.Prl.append(Pi_cap)  # AGC comtrol signal
+                self.Prcl.append(self.Prc)  # AGC actual response
+                self.Ptl.append(self.Ptc)  # EVA total output power
+                self.Pcl.append(self.Pcc)  # EVA total charging power
+                self.Pdl.append(self.Pdc)  # EVA total discharging power
                 self.yl.append(self.y)
-                self.nel.append(self.ne)
+                self.nel.append(self.ne)  # number of online EVs
 
                 self.n_step += 1
 
@@ -863,10 +862,12 @@ class ev_ssm():
             pass
         else:
             pass
+            c_init = self.ev['c'].copy()
             if abs(Pi) > 1e-4:  # deadband
                 self.r_agc(Pi=Pi)
             else:
                 self.r_agc(Pi=0)
+            self.ev['agc'] = c_init - self.ev['c']
             # --- revise control ---
             # `CS` for low charged EVs, and set 'lc' to 1
             # self.ev['lc'] = self.ev['lc'].astype(bool)
@@ -1147,7 +1148,6 @@ class ev_ssm():
         # corrected control
         error = Pi - self.Pr
         iter = 0
-        c0 = self.ev.c.copy()
         while (abs(error) >= 0.005) & (iter < 10):
             error0 = error
             u, v, us, vs = self.g_agc(Pi - self.Pr)
@@ -1185,7 +1185,6 @@ class ev_ssm():
             iter += 1
             if abs(error0 - error) < 0.005:  # tolerante of control error
                 break
-        self.ev['agc'] = c0 - self.ev.c
 
         # number of actions
         self.ev['na'] += (self.ev['soc'] < self.ev['socd']) - self.ev['c']
