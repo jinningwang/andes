@@ -371,7 +371,7 @@ class dcopf(dcbase):
         res: DataFrame
             The output DataFrame contains setpoints ``pg``
         """
-
+        # TODO: add option to solve without line limits
         pg = [0] * self.gen.shape[0]
         if not no_build:
             self.build(info=True)
@@ -604,7 +604,7 @@ class rted(dcopf):
         [_, cost_pg] = super().build_obj()
         # --- RegUp, RegDn cost ---
         cost_ru = sum(self.pru[gen] * self.costdict[gen]['cru'] for gen in GEN)
-        cost_rd = sum(self.pru[gen] * self.costdict[gen]['crd'] for gen in GEN)
+        cost_rd = sum(self.prd[gen] * self.costdict[gen]['crd'] for gen in GEN)
         self.obj = self.mdl.setObjective(expr=cost_pg + cost_ru + cost_rd,
                                          sense=gb.GRB.MINIMIZE)
         return [self.obj, cost_pg, cost_ru, cost_rd]

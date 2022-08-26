@@ -1,6 +1,6 @@
 # --- set up EV generator data ---
 ev_idx = 'PV_10'
-ssa.PV.set(src='p0', idx=ev_idx, attr='v', value=sse.Ptc/ssa.config.mva)
+ssa.PV.set(src='p0', idx=ev_idx, attr='v', value=sse.data["Ptc"]/ssa.config.mva)
 ssa.PV.set(src='pmax', idx=ev_idx, attr='v', value=2*sse.Pu/ssa.config.mva)
 ssa.PV.set(src='pmin', idx=ev_idx, attr='v', value=2*sse.Pl/ssa.config.mva)
 

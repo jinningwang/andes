@@ -84,7 +84,7 @@ agc_gov_idx = agc_table.gov_idx[cond_agc_gov].tolist()
 agc_dg_idx = agc_table.dg_idx[cond_agc_dg].tolist()
 
 # EV results, random select 3 EVs of each SOC level to record SoC
-ridx = sse.ev.sample(frac=1, random_state=sse.seed).groupby('sx', sort=False).head(100).index
+ridx = sse.ev.sample(frac=1, random_state=sse.config["seed"]).groupby('sx', sort=False).head(100).index
 ev_soc_data = -1 * np.ones((t_total, len(ridx)))
 ev_agc_data = -1 * np.ones((t_total, len(ridx)))
 ev_soc_data[0] = sse.ev.soc.iloc[ridx]

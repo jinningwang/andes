@@ -770,6 +770,7 @@ class ev_ssm():
             tqdm progress bar
         """
         t_step = self.config["step"] / 3600  # t_step is in hours
+        Per = 0
         if tf - self.data["ts"] < 1e-5:
             logger.warning(f'{self.config["name"]}: end time {tf}[H] is too close to start time {self.data["ts"]}[H],'
                            "simulation will not start.")
@@ -783,7 +784,7 @@ class ev_ssm():
                         self.g_A(is_update=True)
                     if is_rstate:
                         self.r_state()
-                        self.data["Per"] = self.data["Prc"] - self.data["Pr"]  # error of AGC response
+                        Per = self.data["Prc"] - self.data["Pr"]  # error of AGC response
                     self.report(is_report=False)
 
                 self.data["ts"] = self.g_ts(t)
@@ -793,7 +794,7 @@ class ev_ssm():
                     Pi_cap = min(Pi, self.prumax)
                 elif Pi < 0:
                     Pi_cap = max(Pi, -1*self.prdmax)
-                Pi_input = Pi_cap - (1 - self.config["ecc_off"]) * self.data["Per"]
+                Pi_input = Pi_cap - (1 - self.config["ecc_off"]) * Per# * self.data["Per"]
                 self.g_c(Pi=Pi_input, is_test=is_test)  # update control signal
                 # --- update soc interval and online status ---
                 # charging/discharging power, kW
@@ -1217,6 +1218,7 @@ class ev_ssm():
                                  np.matmul(self.B, u) + np.matmul(self.C, v))[0]
             error = Pi - self.data["Pr"]
             iter += 1
+            # TODO: move to config
             if abs(error0 - error) < 0.005:  # tolerante of control error
                 break
 
