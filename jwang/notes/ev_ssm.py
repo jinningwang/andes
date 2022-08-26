@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 import scipy.stats as stats
 import matplotlib.pyplot as plt
+from collections import OrderedDict
 
 import logging
 logger = logging.getLogger(__name__)
@@ -214,9 +215,9 @@ class ev_ssm():
         self.wsoc = self.ev['wsoc'].sum() / self.wQ / 1e3
         self.ev['Ps'] = self.ev[['u', 'c', 'Pc', 'Pd']].apply(
             lambda x: x[0]*x[1]*x[2] if x[1] >= 0 else x[0]*x[1]*x[3], axis=1)
-        self.Pcc = -1 * self.ev.Ps[self.ev.Ps > 0].sum()/1e3
-        self.Pdc = -1 * self.ev.Ps[self.ev.Ps < 0].sum()/1e3
-        self.Ptc = -1 * self.ev.Ps.sum()/1e3
+        self.data['Ptc'] = -1 * self.ev.Ps.sum()/1e3
+        self.data['Pcc'] = -1 * self.ev.Ps[self.ev.Ps > 0].sum()/1e3
+        self.data['Pdc'] = -1 * self.ev.Ps[self.ev.Ps < 0].sum()/1e3
         self.ev.drop(columns=['wQ', 'wsoc', 'Ps'], inplace=True)
 
         cid = self.ev[self.ev.u == 1].c.value_counts().to_dict()
@@ -226,9 +227,9 @@ class ev_ssm():
 
         if is_report:
             # --- report info ---
-            msg_time = f'{self.name}: ts={np.round(self.ts, 4)}[H], {self.N} EVs, Total Q={self.Q.round(2)} MWh\n'
-            msg_soc = f"Online {self.ne}, Q={self.wQ.round(2)} MWh, SoC={self.wsoc.round(4)}\n"
-            msg_p = f"Power(MW): Pt={self.Ptc.round(4)}, Pc={self.Pcc.round(4)}, Pd={self.Pdc.round(4)}\n"
+            msg_time = f'{self.config["name"]}: ts={np.round(self.data["ts"], 4)}[H], {self.config["N"]} EVs, Total Q={self.Q.round(2)} MWh\n'
+            msg_soc = f'Online {self.data["ne"]}, Q={self.wQ.round(2)} MWh, SoC={self.wsoc.round(4)}\n'
+            msg_p = f'Power(MW): Pt={self.data["Ptc"].round(4)}, Pc={self.data["Pcc"].round(4)}, Pd={self.data["Pdc"].round(4).round(4)}\n'
             logger.warning(msg_time + msg_soc + msg_p + msg_c)
 
     def g_ts(self, ts):
@@ -241,10 +242,9 @@ class ev_ssm():
             current time (in 24H).
         """
         # NOTE: tolerance is 0.1s, and large than 24 will be reduced with 24.
-        if abs(ts - self.ts) < 0.1 * self.step/3600:
-            logger.warning(f"{self.name}: {ts}[H] is too close to current time={self.ts} [H]")
+        if abs(ts - self.data["ts"]) < self.config["t_tol"]:
+            logger.warning(f'{self.config["name"]}: {ts}[H] is too close to current time={self.data["ts"]} [H]')
         else:
-            self.tss.append(ts)
             ts = ts if ts < 24 else ts-24
         return ts
 
@@ -256,12 +256,13 @@ class ev_ssm():
         """
         Notes
         -----
-        For efficiency, the EVs that are not involved in the time range
+        1. For efficiency, the EVs that are out of the time range
         [``ts``, ``ts+1``] will be droped after initialization.
 
-        ``n_pref`` is the number of pereference levels, lower level is
+        1. ``n_pref`` is the number of pereference levels, lower level is
         more likely to response AGC. EVs are evenly distributed on each
-        level. [This feature will result in control error, ]
+        level.
+        [NOT SOLVED] This feature will result in control error if ``n_pref`` > 1.
 
         Parameters
         ----------
@@ -291,18 +292,14 @@ class ev_ssm():
             True to disable error correction.
         """
         # --- 1. init ---
-        self.name = name
-        self.N = N
-        self.step = step
-        self.tp = tp
-        self.Np = int(tp / step)  # update cycle
-        self.lr = lr
-        self.lp = lp
-        self.seed = seed
-        np.random.seed(self.seed)
-        self.n_pref = n_pref
-        self.ict_off = ict_off
-        self.ecc_off = ecc_off
+        # TODO: improve documenation
+        self.config = OrderedDict(ict_off=ict_off, ecc_off=ecc_off,
+                                  N=N, step=step, tp=tp, n_pref=n_pref,
+                                  seed=seed,
+                                  Np=int(tp/step), lr=lr, lp=lp,
+                                  tt_mean=0.5, tt_var=0.02, tt_lb=0, tt_ub=1,
+                                  t_tol=0.1/3600, Pdbd=1e-4, name=name)
+        # Pdbd: deadband of Power
         # --- 1a. uniform distribution parameters range ---
         self.ev_ufparam = dict(Ns=20,
                                Pl=5.0, Pu=7.0,
@@ -312,35 +309,22 @@ class ev_ssm():
         #  --- 1b. normal distribution parameters range ---
         self.ev_pdf_name = ['soci', 'socd', 'ts1', 'ts2', 'tf1', 'tf2', 'tt']
         self.ev_pdf_data = {'mean': [0.3,    0.8,    -6.5,  17.5,   8.9,  32.9, tt_mean],
-                            'var': [0.05,   0.03,   3.4,   3.4,    3.4,  3.4, tt_var],
+                            'var': [0.05,   0.03,   3.4,   3.4,   3.4,  3.4, tt_var],
                             'lb': [0.2,    0.7,    0.0,   5.5,    0.0,  20.9, tt_lb],
                             'ub': [0.4,    0.9,    5.5,   24.0,   20.9, 24.0, tt_ub],
                             'info':  ['initial SoC', 'demanded SoC',
                                       'start charging time 1', 'start charging time 2',
                                       'finish charging time 1', 'finish charging time 2',
                                       'tolerance of increased charging time']}
-        self.ts = ts
-        self.tss = [ts]
-        self.build(ts=ts, n_pref=self.n_pref)
-        self.nel = [self.ne]
+        # ts: current time
+        # Pr: estimated AGC response power
+        # Prc: actual AGC response power
+        # Per: error of AGC response power
+        self.data = OrderedDict(ts=ts, Pr=0, Prc=0, Per=0)
+        self.build()
         self.report(is_report=is_report)
-
-        self.Ptl = [self.Ptc]
-        self.Pcl = [self.Pcc]
-        self.Pdl = [self.Pdc]
-
-        self.ep()
-        self.Pr = 0  # estimated AGC response power
-        self.Prl = [self.Pr]
-        self.Prc = 0  # actual AGC response power
-        self.Prcl = [self.Prc]
-        self.Per = 0  # error of AGC power
-        self.Perl = [self.Per]
-        self.y = self.ep()[0]
-        self.yl = [self.y]  # estiamted output power
-
-        # --- SSM ---
-        self.Pdbd = 1e-4  # Pdbd: deadband of Power
+        d2 = dict(ne=self.ev.u.sum())
+        self.data = {**self.data, **d2}
 
         # --- output: estimated FRC ---
         self.prumax = 0
@@ -348,23 +332,18 @@ class ev_ssm():
         self.g_u()
         self.g_frc()
 
+        self.tsd = pd.DataFrame(data=self.data,
+                                index=[0])
         # --- adaptive soc coeff ---
-        self.sdu = self.ev.socd.max()
-        self.sdl = self.ev.socd.min()
-        Qave = self.ev.Q.mean() / 1000
-        ncave = self.ev.nc.mean()
-        self.Th = (self.sdu - self.sdl) * Qave / (2 * self.Pave * ncave)
+        sdu = self.ev['socd'].max()
+        sdl = self.ev['socd'].min()
+        Qave = self.ev['Q'].mean() / 1e3 # MWh
+        ncave = self.ev['nc'].mean()
+        self.Th = (sdu - sdl) * Qave / (2 * self.Pave * ncave)
 
-    def build(self, ts, n_pref):
+    def build(self):
         """
         Build the ev DataFrame.
-
-        Parameters
-        ----------
-        ts: float
-            Current time in hour, [0, 24].
-        n_pref: int
-            Number of pereference level, n_pref >= 1.
 
         Returns
         -------
@@ -399,13 +378,14 @@ class ev_ssm():
                       'nc':   ['nl', 'nu'],
                       'nd':   ['nl', 'nu'],
                       'Q':    ['Ql', 'Qu']}
+        np.random.seed(self.config['seed'])
         for col in cols:
             idxl = cols_bound[col][0]
             idxh = cols_bound[col][1]
             self.ev[col] = np.random.uniform(
                 low=self.ev_ufparam[idxl],
                 high=self.ev_ufparam[idxh],
-                size=self.N)
+                size=self.config['N'])
 
         # Assumption: (1) Pd == Pc; (2) nd == nc;
         self.ev.Pd = self.ev.Pc
@@ -417,14 +397,14 @@ class ev_ssm():
             self.ev[col] = stats.truncnorm(
                 (ev_pdf[col]['lb'] - ev_pdf[col]['mean']) / ev_pdf[col]['var'],
                 (ev_pdf[col]['ub'] - ev_pdf[col]['mean']) / ev_pdf[col]['var'],
-                loc=ev_pdf[col]['mean'], scale=ev_pdf[col]['var']).rvs(self.N,
-                                                                       random_state=self.seed)
+                loc=ev_pdf[col]['mean'], scale=ev_pdf[col]['var']).rvs(self.config['N'],
+                                                                       random_state=self.config["seed"])
 
         # ts1, ts2, tf1, tf2
         et = self.ev.copy()
         r1 = 0.5  # ratio of t1
-        tp1 = self.ev[['ts1', 'tf1']].sample(n=int(et.shape[0]*r1), random_state=2021)
-        tp2 = self.ev[['ts2', 'tf2']].sample(n=int(et.shape[0]*(1-r1)), random_state=2021)
+        tp1 = self.ev[['ts1', 'tf1']].sample(n=int(et.shape[0]*r1), random_state=self.config["seed"])
+        tp2 = self.ev[['ts2', 'tf2']].sample(n=int(et.shape[0]*(1-r1)), random_state=self.config["seed"])
         tp = pd.concat([tp1, tp2], axis=0).reset_index(drop=True).fillna(0)
         tp['ts'] = tp['ts1'] + tp['ts2']
         tp['tf'] = tp['tf1'] + tp['tf2']
@@ -450,7 +430,7 @@ class ev_ssm():
         # --- update soc interval and online status ---
         # soc is initialized considering random behavior
         self.ev['soc'] = self.ev[['soci', 'ts', 'Pc', 'nc', 'Q', 'tf']].apply(
-            lambda x: x[0] + (min(ts-x[1], x[5]-x[1]))*x[2]*x[3]/x[4] if ts > x[1] else x[0], axis=1)
+            lambda x: x[0] + (min(self.data['ts']-x[1], x[5]-x[1]))*x[2]*x[3]/x[4] if self.data['ts'] > x[1] else x[0], axis=1)
         self.ev['soc'] = self.ev['soc'].apply(lambda x: min(x, self.socu))
         self.ev['soc'] = self.ev['soc'].apply(lambda x: max(x, self.socl))
         self.ev['bd'] = self.ev.soc.apply(lambda x: 1 if (x <= self.sl) | (x >= self.su) else 0)
@@ -475,18 +455,17 @@ class ev_ssm():
         self.r_state()
 
         # initialize x series
-        self.ev['xl'] = [[[], [], []]] * self.N
-        self.ne = self.ev.u.sum()  # number of online EVs
+        self.ev['xl'] = [[[], [], []]] * self.config["N"]
+        self.data["ne"] = self.ev.u.sum()  # number of online EVs
 
         # pereference
         # Note: pereference is chosen from a list [0, 1, 2, n_pref]
         # the probability of each level is evenly distributed
         # lower one is preferred to be firstly chosen to response AGC
-        self.pref = list(range(self.n_pref))
-        self.rho = [1 / self.n_pref] * self.n_pref
-        self.ev['pref'] = np.random.choice(self.pref,
-                                           p=self.rho,
-                                           size=self.N)
+        self.pref = list(range(self.config["n_pref"]))
+        self.rho = [1 / self.config["n_pref"]] * self.config["n_pref"]
+        self.ev['pref'] = np.random.choice(self.pref, p = self.rho,
+                                           size = self.config["N"])
 
         ev_cols = ['u', 'u0',  'soc', 'bd', 'c', 'c2', 'c0', 'sx', 'dP', 'xl',
                    'soci', 'socd', 'Pc', 'Pd', 'nc', 'nd', 'Q', 'ts', 'tf', 'tt',
@@ -496,10 +475,10 @@ class ev_ssm():
         self.ev['mod'] = 0  # `mod` is indicator of modified of over or under charge
 
         # number of actions
-        self.ev['na'] = stats.truncnorm((-2000 - 400 * (self.ev['tf'] - ts)) / (self.ev['soci'] * 100),
-                                        (8000 - 400 * (self.ev['tf'] - ts)) / (self.ev['soci'] * 100),
-                                        loc=400 * (self.ev['tf'] - ts), scale=self.ev['soci'] * 100).rvs(self.ev.shape[0],
-                                                                                                         random_state=self.seed)
+        self.ev['na'] = stats.truncnorm((-2000 - 400 * (self.ev['tf'] - self.data['ts'])) / (self.ev['soci'] * 100),
+                                        (8000 - 400 * (self.ev['tf'] - self.data['ts'])) / (self.ev['soci'] * 100),
+                                        loc=400 * (self.ev['tf'] - self.data['ts']), scale=self.ev['soci'] * 100).rvs(self.ev.shape[0],
+                                                                                                         random_state=self.config["seed"])
         self.ev['na'] = self.ev['na'].astype(int)
 
         # max number of actions
@@ -507,19 +486,20 @@ class ev_ssm():
                           - self.ev['socd'] * self.ev['Q']) / (self.ev['Pc'].mean() * self.ev['nc'].mean() * 4 / 3600)
         self.ev['nam'] = self.ev['nam'].astype(int)
         # TODO: fix warning
-        self.ev['na'][self.ev['na'] > self.ev['nam']] = self.ev['nam'][self.ev['na'] > self.ev['nam']]
-        self.ev['lc'][self.ev['na'] >= self.ev['nam']] = 1
-        if self.ict_off:
+        na_rid = self.ev[self.ev['na'] >= self.ev['nam']].index
+        self.ev['na'].iloc[na_rid] = self.ev['nam'].iloc[na_rid]
+        self.ev['lc'].iloc[na_rid] = 1
+        if self.config["ict_off"]:
             self.ev['lc'] = 0
         self.g_u()
-        # self.nec = self.ev.u.sum() - self.ev.lc.sum()  # numebr of online EVs with lc == 0
+        # self.data["nec"] = self.ev.u.sum() - self.ev.lc.sum()  # numebr of online EVs with lc == 0
 
         self.g_BCD()
         self.n_step = 1
         # --- drop EVs that are not in time range ---
         set0 = set(self.ev.index)
-        set1 = set(self.ev[(self.ev.tf <= ts)].index)
-        set2 = set(self.ev[(self.ev.ts >= ts + 1)].index)
+        set1 = set(self.ev[(self.ev.tf <= self.data['ts'])].index)
+        set2 = set(self.ev[(self.ev.ts >= self.data['ts'] + 1)].index)
         set_in = set0 - set1 - set2
         self.ev = self.ev.iloc[list(set_in)].reset_index(drop=True)
         return True
@@ -530,11 +510,11 @@ class ev_ssm():
         """
         # --- online status ---
         self.ev['u0'] = self.ev.u.astype(int)
-        self.ev['u'] = (self.ev.ts <= self.ts) & (self.ev.tf >= self.ts)
+        self.ev['u'] = (self.ev.ts <= self.data["ts"]) & (self.ev.tf >= self.data["ts"])
         self.ev['u'] = self.ev['u'].astype(int)
-        self.ne = self.ev.u.sum()  # number of online EVs
+        self.data["ne"] = self.ev.u.sum()  # number of online EVs
         # number of online and non low-charge EVs
-        self.nec = self.ev[(self.ev['lc']==0) & (self.ev['u']==1)].shape[0]
+        self.data["nec"] = self.ev[(self.ev['lc']==0) & (self.ev['u']==1)].shape[0]
         return True
 
     def g_x(self):
@@ -570,7 +550,7 @@ class ev_ssm():
         self.xtab.fillna(0, inplace=True)
 
         # TODO: use estimated ne rather than actual ne?
-        self.rtab = self.xtab.div(self.nec)
+        self.rtab = self.xtab.div(self.data["nec"])
         return True
 
     def save_A(self, csv):
@@ -584,7 +564,7 @@ class ev_ssm():
         """
         As = pd.DataFrame(data=self.A)
         As.to_csv(csv, index=False)
-        logger.warning(f'{self.name}: Save A to %s.' % csv)
+        logger.warning(f'{self.config["name"]}: Save A to %s.' % csv)
         return True
 
     def load_A(self, csv):
@@ -599,9 +579,9 @@ class ev_ssm():
             csv file name.
         """
         self.A = pd.read_csv(csv).values
-        logger.warning(f'{self.name}: Load A from %s.' % csv)
+        logger.warning(f'{self.config["name"]}: Load A from %s.' % csv)
 
-    def plot_agc(self, figsize=(6, 3), style='default', tu='h'):
+    def plot_agc(self, figsize=(6, 3), style='default', tu='s', **kwargs):
         """
         Plot the AGC results.
 
@@ -615,26 +595,29 @@ class ev_ssm():
             Time unit, 'h' for hour, 's' for second.
         """
         plt.style.use(style)
-        fig_agc, ax_agc = plt.subplots(figsize=figsize)
-        
+        fig_agc, ax_agc = plt.subplots(figsize=figsize, **kwargs)
+        self.tsd['ts2'] = 3600* (self.tsd['ts'] - self.tsd['ts'].iloc[0])
         if tu == 's':
-            tss = [3600*(ts - self.tss[0]) for ts in self.tss]
+            x = 'ts2'
             xlabel = 'Time [s]'
         elif tu == 'h':
-            tss = self.tss
+            x = 'ts'
             xlabel = 'Time [H]'
-        ax_agc.plot(tss, self.Prl, label="Control")
-        ax_agc.plot(tss, self.Prcl, label="Response")
+        self.tsd.plot(x=x, y=['Pr', 'Prc'],
+                      label=["Control", "Response"],
+                      ax=ax_agc)
 
         ax_agc.set_xlabel(xlabel)
         ax_agc.set_ylabel("Power (MW)")
         ax_agc.set_title(f"AGC response")
-        ax_agc.set_xlim(tss[0], tss[-1])
+        ax_agc.set_xlim(self.tsd[x].iloc[0], self.tsd[x].iloc[-1])
         ax_agc.grid()
         ax_agc.legend()
+        self.tsd.drop(columns=['ts2'], inplace=True)
         return fig_agc, ax_agc
 
-    def plot(self, figsize=(6, 3), style='default', tu='h'):
+    def plot(self, figsize=(6, 3), style='default', tu='s',
+             bbox_to_anchor=(0.85, 0.2), loc="lower right", **kwargs):
         """
         Plot the results.
 
@@ -648,29 +631,29 @@ class ev_ssm():
             Time unit, 'h' for hour, 's' for second.
         """
         plt.style.use(style)
-        fig_ev, ax_ev = plt.subplots(figsize=figsize)
+        fig_ev, ax_ev = plt.subplots(figsize=figsize, **kwargs)
+        self.tsd['ts2'] = 3600* (self.tsd['ts'] - self.tsd['ts'].iloc[0])
         if tu == 's':
-            tss = [3600*(ts - self.tss[0]) for ts in self.tss]
+            x = 'ts2'
             xlabel = 'Time [s]'
         elif tu == 'h':
-            tss = self.tss
+            x = 'ts'
             xlabel = 'Time [H]'
-        p1 = ax_ev.plot(tss, self.Ptl, label="Total")
-        p2 = ax_ev.plot(tss, self.Pcl, label="Charging")
-        p3 = ax_ev.plot(tss, self.Pdl, label="Discharging")
+        self.tsd.plot(x=x, y=['Ptc', 'Pcc', 'Pdc'],
+                      label=['Total', 'Charging', 'Discharging'],
+                      ax=ax_ev, legend=False)
         ax2 = ax_ev.twinx()
-        p4 = ax2.plot(tss, self.nel, label='Online EVs', color='orange')
-        ax2.set_ylabel("Number")
-
+        self.tsd.plot(x=x, y='ne', label='Online EVs',
+                      color='orange', ax=ax2,
+                      legend=False)
+        ax2.set_ylabel("Online EVs")
         ax_ev.set_xlabel(xlabel)
         ax_ev.set_ylabel("Power (MW)")
-        ax_ev.set_title(f"{self.name}")
-        ax_ev.set_xlim(tss[0], tss[-1])
+        ax_ev.set_title(f'{self.config["name"]}')
+        ax_ev.set_xlim(self.tsd[x].iloc[0], self.tsd[x].iloc[-1])
         ax_ev.grid()
-
-        lns = p1 + p2 + p3 + p4
-        labels = [l.get_label() for l in lns]
-        plt.legend(lns, labels)
+        fig_ev.legend(loc=loc, bbox_to_anchor=bbox_to_anchor, **kwargs)
+        self.tsd.drop(columns=['ts2'], inplace=True)
         return fig_ev, ax_ev
 
     def test(self, tf=9.05):
@@ -687,18 +670,18 @@ class ev_ssm():
         tf: float
             end time [H]
         """
-        t_step = self.step / 3600
+        t_step = self.config["step"] / 3600
         ev_cols = ['u', 'u0', 'soc', 'sx', 'bd',
                    'ts', 'tf', 'c', 'c0', 'dP', 'c2']
         ev_copy = self.ev[ev_cols].copy()
 
         self.ev['tf'] = 23.9
         self.ev['ts'] = 0.1
-        self.ev['soc'] = np.random.uniform(low=0.001, high=0.999, size=self.N)
+        self.ev['soc'] = np.random.uniform(low=0.001, high=0.999, size=self.config["N"])
         self.g_u()
 
         # initialize control signal: randomly assign C/I/D
-        self.ev['c'] = np.random.choice([-1, 0, 1], p=[0.33, 0.33, 0.34], size=self.N)
+        self.ev['c'] = np.random.choice([-1, 0, 1], p=[0.33, 0.33, 0.34], size=self.config["N"])
         # revise
         # offline -> I
         self.ev['c'] = self.ev[['u', 'c']].apply(lambda x: x[1] if x[0] != 0 else 0, axis=1)
@@ -719,8 +702,8 @@ class ev_ssm():
         self.g_x()
         self.g_xl()
 
-        for t in tqdm(np.arange(self.ts+t_step, tf, t_step), desc=f'{self.name} MCS'):
-            self.ts = self.g_ts(t)
+        for t in tqdm(np.arange(self.data["ts"]+t_step, tf, t_step), desc=f'{self.config["name"]} MCS'):
+            self.data["ts"] = self.g_ts(t)
             self.g_u()  # update online status
             self.g_c(is_test=True)  # update control signal
             # --- update soc interval and online status ---
@@ -786,31 +769,31 @@ class ev_ssm():
         disable: bool
             tqdm progress bar
         """
-        t_step = self.step / 3600  # t_step is in hours
-        if tf - self.ts < 1e-5:
-            logger.warning(f"{self.name}: end time {tf}[H] is too close to start time {self.ts}[H],"
+        t_step = self.config["step"] / 3600  # t_step is in hours
+        if tf - self.data["ts"] < 1e-5:
+            logger.warning(f'{self.config["name"]}: end time {tf}[H] is too close to start time {self.data["ts"]}[H],'
                            "simulation will not start.")
         else:
-            for t in tqdm(np.arange(self.ts, tf + 0.1/3600, t_step), desc=f'{self.name} MCS', disable=disable):
-                if abs(t - self.ts) < 1e-6:
+            for t in tqdm(np.arange(self.data["ts"], tf + 0.1/3600, t_step), desc=f'{self.config["name"]} MCS', disable=disable):
+                if abs(t - self.data["ts"]) < 1e-6:
                     continue
                 # --- update SSM A ---
-                if self.n_step % self.Np == 0:
+                if self.n_step % self.config["Np"] == 0:
                     if is_updateA:
                         self.g_A(is_update=True)
                     if is_rstate:
                         self.r_state()
-                        self.Per = self.Prc - self.Pr  # error of AGC response
+                        self.data["Per"] = self.data["Prc"] - self.data["Pr"]  # error of AGC response
                     self.report(is_report=False)
 
-                self.ts = self.g_ts(t)
+                self.data["ts"] = self.g_ts(t)
                 self.g_u()  # update online status
                 # TODO: add warning when Pi is 0
                 if Pi >= 0:
                     Pi_cap = min(Pi, self.prumax)
                 elif Pi < 0:
                     Pi_cap = max(Pi, -1*self.prdmax)
-                Pi_input = Pi_cap - (1 - self.ecc_off) * self.Per
+                Pi_input = Pi_cap - (1 - self.config["ecc_off"]) * self.data["Per"]
                 self.g_c(Pi=Pi_input, is_test=is_test)  # update control signal
                 # --- update soc interval and online status ---
                 # charging/discharging power, kW
@@ -830,16 +813,9 @@ class ev_ssm():
 
                 self.report(is_report=False)  # record power
                 # Actual AGC response: AGC switched power if not modified. (MW)
-                self.Prc += np.sum(self.ev.agc * self.ev.Pc * (1 - self.ev['mod']) * (1 - self.ev['lc'])) * 1e-3
-                # NOTE: error is not considered as part of the control signal
-                self.Perl.append(self.Per)
-                self.Prl.append(Pi_cap)  # AGC comtrol signal
-                self.Prcl.append(self.Prc)  # AGC actual response
-                self.Ptl.append(self.Ptc)  # EVA total output power
-                self.Pcl.append(self.Pcc)  # EVA total charging power
-                self.Pdl.append(self.Pdc)  # EVA total discharging power
-                self.yl.append(self.y)
-                self.nel.append(self.ne)  # number of online EVs
+                self.data["Prc"] += np.sum(self.ev.agc * self.ev.Pc * (1 - self.ev['mod']) * (1 - self.ev['lc'])) * 1e-3
+                self.tsd = pd.concat([self.tsd, pd.DataFrame(data=self.data, index=[0])],
+                             ignore_index=True)
 
                 self.n_step += 1
 
@@ -873,9 +849,9 @@ class ev_ssm():
             for i in range(len(d)-1):
                 A0[d[i+1], d[i]] += 1
 
-        # TODO: Consider data length limit: self.lp
+        # TODO: Consider data length limit: self.config["lp"]
         if is_update:
-            n = int(self.lr / (1-self.lr))
+            n = int(self.config["lr"] / (1-self.config["lr"]))
             A0 = self.A * len(data) * n * np.ones((60,))
             self.A = self.A + A0
             row_sum = self.A.sum(axis=0)
@@ -888,7 +864,7 @@ class ev_ssm():
         """
         Update EV x series.
         """
-        self.ev['tnow'] = self.ts
+        self.ev['tnow'] = self.data["ts"]
         col = ['sx', 'xl', 'u', 'u0', 'c2', 'tnow', 'c0', 'bd']
         self.ev['xl'] = self.ev[col].apply(update_xl, axis=1)
         self.ev.drop(['tnow'], axis=1, inplace=True)
@@ -981,6 +957,7 @@ class ev_ssm():
 
     def reset(self, tnow=10, clean_xl=False):
         """
+        NOT TEST YET.
         Reset the pd.DataFrame ``ev`` to the initial time.
 
         Parameters
@@ -992,10 +969,10 @@ class ev_ssm():
         """
         if tnow:
             self.tss = [tnow]
-            self.ts = self.tss[0]
+            self.data["ts"] = self.tss[0]
         else:
             self.tss = [self.tss[0]]
-            self.ts = self.tss[0]
+            self.data["ts"] = self.tss[0]
         col = ['u', 'u0',  'soc', 'bd', 'c', 'c2', 'c0', 'sx', 'dP', 'xl',
                'soci', 'socd', 'Pc', 'Pd', 'nc', 'nd', 'Q', 'ts', 'tf']
         self.ev = self.ev[col]
@@ -1004,7 +981,7 @@ class ev_ssm():
         self.ev['c0'] = self.ev['c2']
         self.ev['dP'] = 0
         if clean_xl:
-            self.ev['xl'] = [[[], [], []]] * self.N
+            self.ev['xl'] = [[[], [], []]] * self.config["N"]
         self.ev['u0'] = 0
         self.g_u()
         self.ev['u0'] = self.ev.u
@@ -1012,12 +989,12 @@ class ev_ssm():
         self.find_sx()
         self.g_x()
         self.r_state()
-        self.ne = self.ev.u.sum()
-        self.nec = self.ev.u.sum() - self.ev.neo.sum()
+        self.data["ne"] = self.ev.u.sum()
+        self.data["nec"] = self.ev.u.sum() - self.ev.neo.sum()
         self.n_step = 1
-        logger.warning(f"{self.name}: Reset to {self.ts}[H]")
+        logger.warning(f'{self.config["name"]}: Reset to {self.data["ts"]}[H]')
         self.report()
-        self.Ptl = [self.Ptc]
+        self.Ptl = [self.data["Ptc"]]
         self.Pcl = [self.Pcc]
         self.Pdl = [self.Pdc]
         self.nel = [self.ne]
@@ -1035,7 +1012,7 @@ class ev_ssm():
             self.x0 = self.rtab.values.reshape(-1,)
         else:
             self.x0 = np.zeros(60,)
-            logger.warning(f"{self.name}: 'rtab' is not available!")
+            logger.warning(f'{self.config["name"]}: `rtab` is not available!')
         return self.x0
 
     def cp(self):
@@ -1064,22 +1041,21 @@ class ev_ssm():
     def ep(self):
         """
         Estimate output power (MW).
-        Total, upper, lower
 
         Returns
         -------
         out: list of float
-            [Pt, Pu, Pl] (MW)
+            [Pt, Pu, Pl], total, upper, lower (MW)
         """
         # TODO: `ne` should be replaced with an recorded value
-        self.Pt = np.matmul(self.ne * self.D, self.x0)[0]
-        self.Pu = np.matmul(self.ne * self.Db, self.x0)[0]
-        self.Pl = np.matmul(self.ne * self.Dd, self.x0)[0]
-        self.Pa = self.ne * np.matmul(self.Da - self.D, self.x0)[0]
-        self.Pb = self.ne * np.matmul(self.Db - self.Da, self.x0)[0]
-        self.Pc = self.ne * np.matmul(self.Dc - self.D, self.x0)[0]
-        self.Pd = self.ne * np.matmul(self.Dd - self.Dc, self.x0)[0]
-        out = [self.Pt, self.Pu, self.Pl, self.Pa, self.Pc]
+        self.data["Pt"] = np.matmul(self.data["ne"] * self.D, self.x0)[0]
+        self.Pu = np.matmul(self.data["ne"] * self.Db, self.x0)[0]
+        self.Pl = np.matmul(self.data["ne"] * self.Dd, self.x0)[0]
+        self.Pa = self.data["ne"] * np.matmul(self.Da - self.D, self.x0)[0]
+        self.Pb = self.data["ne"] * np.matmul(self.Db - self.Da, self.x0)[0]
+        self.Pc = self.data["ne"] * np.matmul(self.Dc - self.D, self.x0)[0]
+        self.Pd = self.data["ne"] * np.matmul(self.Dd - self.Dc, self.x0)[0]
+        out = [self.data["Pt"], self.Pu, self.Pl, self.Pa, self.Pc]
         return out
 
     def g_frc(self, nea=None):
@@ -1090,7 +1066,7 @@ class ev_ssm():
         ----------
         nea: int
             adjusted EV numbers, multiplier of the FRC,
-            'nea' is set to `self.ne` if not given.
+            'nea' is set to `self.data["ne"]` if not given.
             FRC = FRC0 * nea / ne
 
         Returns
@@ -1100,17 +1076,17 @@ class ev_ssm():
         """
         self.report(is_report=False)
         self.ep()
-        RU = self.Pu - self.Pt
-        RD = self.Pt - self.Pl
+        RU = self.Pu - self.data["Pt"]
+        RD = self.data["Pt"] - self.Pl
         # --- demanded-SOC limited FRC is not that reasonable ---
         # TODO: 0.8 is the estimated soc demanded, may need revision
         # self.prumax = max(min((self.wsoc - 0.8) * self.wQ / T, RU), 0)
         # self.prdmax = min((1 - self.wsoc) * self.wQ / T, RD)
         # --- SSM FRC is not that reasonable ---
         if not nea:
-            nea = self.nec
-        self.prumax = RU * nea / self.ne * self.nec / self.ne
-        self.prdmax = RD * nea / self.ne * self.nec / self.ne
+            nea = self.data["nec"]
+        self.prumax = RU * nea / self.data["ne"] * self.data["nec"] / self.data["ne"]
+        self.prdmax = RD * nea / self.data["ne"] * self.data["nec"] / self.data["ne"]
         return [self.prumax, self.prdmax]
 
     def g_BCD(self):
@@ -1202,17 +1178,17 @@ class ev_ssm():
         v = np.zeros(self.Ns)
         us = np.zeros(self.Ns+1)
         vs = np.zeros(self.Ns+1)
-        usp = np.repeat(us.reshape(self.Ns+1, 1), self.n_pref, axis=1)
-        vsp = np.repeat(vs.reshape(self.Ns+1, 1), self.n_pref, axis=1)
+        usp = np.repeat(us.reshape(self.Ns+1, 1), self.config["n_pref"], axis=1)
+        vsp = np.repeat(vs.reshape(self.Ns+1, 1), self.config["n_pref"], axis=1)
         # corrected control
-        error = Pi - self.Pr
+        error = Pi - self.data["Pr"]
         iter = 0
         while (abs(error) >= 0.005) & (iter < 10):
             error0 = error
-            u, v, us, vs = self.g_agc(Pi - self.Pr)
+            u, v, us, vs = self.g_agc(Pi - self.data["Pr"])
             # pereference signal
-            usp = np.repeat(us.reshape(self.Ns+1, 1), self.n_pref, axis=1)
-            vsp = np.repeat(vs.reshape(self.Ns+1, 1), self.n_pref, axis=1)
+            usp = np.repeat(us.reshape(self.Ns+1, 1), self.config["n_pref"], axis=1)
+            vsp = np.repeat(vs.reshape(self.Ns+1, 1), self.config["n_pref"], axis=1)
             for i_sx in range(self.Ns):
                 pu = us[i_sx]
                 pv = vs[i_sx]
@@ -1232,22 +1208,21 @@ class ev_ssm():
             self.ev.c = self.ev[['u', 'c', 'sx', 'pref']].apply(lambda x: r_agc_sev(x, us, vs, usp, vsp), axis=1)
             self.g_x()
             # --- record output ---
-            self.y0 = self.ep()[0]  # self.Pt
             # TODO: modification of random traveling behavior
             self.x0 = self.x0 + np.matmul(self.B, u) + np.matmul(self.C, v)
-            self.y = self.ep()[0]   # self.Pt
+
             # dx0 = np.matmul(self.B, u) + np.matmul(self.C, v)
-            # self.Pr = np.matmul(self.D, dx0)[0]
-            self.Pr += np.matmul(self.nec * self.D,
+            # self.data["Pr"] = np.matmul(self.D, dx0)[0]
+            self.data["Pr"] += np.matmul(self.data["nec"] * self.D,
                                  np.matmul(self.B, u) + np.matmul(self.C, v))[0]
-            error = Pi - self.Pr
+            error = Pi - self.data["Pr"]
             iter += 1
             if abs(error0 - error) < 0.005:  # tolerante of control error
                 break
 
         # number of actions
         self.ev['na'] += (self.ev['soc'] < self.ev['socd']) - self.ev['c']
-        if not self.ict_off:
+        if not self.config["ict_off"]:
             lc0 = self.ev['lc'].copy().astype(bool)
             self.ev['lc'] = self.ev['na'] >= self.ev['nam']
             self.ev['lc'] = self.ev['lc'] | lc0  # once lc, never response again
@@ -1256,9 +1231,9 @@ class ev_ssm():
         self.uv = [u, v, us, vs, usp, vsp]
         # TODO: ps array
         self.usp = np.repeat(us[0:self.Ns].reshape(self.Ns, 1),
-                             self.n_pref, axis=1)
+                             self.config["n_pref"], axis=1)
         self.vsp = np.repeat(vs[0:self.Ns].reshape(self.Ns, 1),
-                             self.n_pref, axis=1)
+                             self.config["n_pref"], axis=1)
         return u, v, us, vs, usp, vsp
 
     def g_agc(self, Pi):
@@ -1296,7 +1271,7 @@ class ev_ssm():
 
         if Pi >= deadband:  # deadband0:  # RegUp
             # --- step I ---
-            ru = min(Pi, self.Pa) / (self.Pave * self.nec)  # total RegUp power
+            ru = min(Pi, self.Pa) / (self.Pave * self.data["nec"])  # total RegUp power
             u = np.zeros(self.Ns)   # C->I
             v = np.zeros(self.Ns)   # I->D
             for j in range(self.Ns):
@@ -1313,13 +1288,13 @@ class ev_ssm():
 
         elif Pi <= -deadband:  # RegDn
             # --- step I ---
-            rv = max(Pi, self.Pc) / (self.Pave * self.nec)
+            rv = max(Pi, self.Pc) / (self.Pave * self.data["nec"])
             v = np.zeros(self.Ns)
             for j in range(self.Ns):
                 a = rv + np.sum(x[2*self.Ns: 2*self.Ns+j])
                 v[j] = max(min(a, 0), -1 * x[j+2*self.Ns])
 
-            ru = min(Pi-self.Pc, 0) / (self.Pave * self.nec)
+            ru = min(Pi-self.Pc, 0) / (self.Pave * self.data["nec"])
             u = np.zeros(self.Ns)
             for j in range(self.Ns):
                 a = ru - np.sum(v[0:j]) - np.sum(u[0:j-1])
@@ -1348,20 +1323,22 @@ class ev_ssm():
         np.array
             [fcs(x), fis(x), fds(x)]
         """
-        conds = [x < self.sdl,
-                 (x >= self.sdl) & (x < self.sdu),
-                 x >= self.sdu]
+        sdu = self.ev['socd'].max()
+        sdl = self.ev['socd'].min()
+        conds = [x < sdl,
+                 (x >= sdl) & (x < sdu),
+                 x >= sdu]
 
-        k1 = 0.5 / (self.sdu - self.sdl)
-        k2 = 0.5 / (1 - self.sdu)
-        k3 = 0.5 / self.sdl
-        k4 = 0.5 / self.sdu
+        k1 = 0.5 / (sdu - self.sdl)
+        k2 = 0.5 / (1 - sdu)
+        k3 = 0.5 / sdl
+        k4 = 0.5 / sdu
 
         fun_cs = [lambda x: 1.,
-                  lambda x: 1 - k1*(x-self.sdl),
-                  lambda x: 0.5 - k2*(x-self.sdu)]
+                  lambda x: 1 - k1*(x-sdl),
+                  lambda x: 0.5 - k2*(x-sdu)]
         fun_is = [lambda x: k3*x,
-                  lambda x: 0.5 + k1*(x-self.sdl),
+                  lambda x: 0.5 + k1*(x-sdl),
                   lambda x: 1]
         fun_ds = [lambda x: k4*x,
                   lambda x: k4*x,
