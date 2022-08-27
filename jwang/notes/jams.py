@@ -45,8 +45,8 @@ class dcbase:
         Parameters
         ----------
         model : list
-            list of models that need to be updated.
-            If None is given, update all models:
+            list of models that will to be updated.
+            If ``None`` is given, update all models:
             ['bus', 'gen', 'line', 'gen_gsf', 'cost']
         """
         # --- build dict ---
@@ -182,15 +182,16 @@ class dcbase:
     def data_check(self, skip_cost=False, info=True):
         """
         Check data consistency:
-
         1. If scaling factors ``sf`` of gen and load are valid.
         1. If gen upper and lower limits  ``pmax`` ``pmin`` are valid.
         1. If cost data attr ``cost``exists, when set ``skip_cost=False``.
 
         Parameters
         ----------
-        skip_cost : bool
+        skip_cost: bool
             True to skip cost data check
+        info: bool
+            True to print info
         """
         warning_list = []
         absent_list = []
@@ -246,7 +247,7 @@ class dcopf(dcbase):
         name : str
             Name of the system.
         OutputFlag : int
-            Output flag, 0 or 1.
+            1 to print output, 0 to suppress output.
         """
         super().__init__(name)
         self.OutputFlag = OutputFlag
@@ -257,7 +258,8 @@ class dcopf(dcbase):
 
     def from_andes(self, ssa, no_build=False):
         super().from_andes(ssa)
-        if not no_build: self.build(info=False)
+        if not no_build:
+            self.build(info=False)
 
     def build(self, info=True):
         """
@@ -313,7 +315,7 @@ class dcopf(dcbase):
     def build_obj(self):
         """
         Build gurobi objective as attribtue ``obj``.
-        
+
         Returns
         -------
         list: mixed list
@@ -468,7 +470,7 @@ class rted(dcopf):
     Real-time economic dispatch (RTED) using DCOPF.
 
     In the modeling, cost of generation and SFR are minimized, s.t.:
-    power balance, line limits, generator active power limits,
+    power balance, line limits, generator active power limits, SFR reserve,
     and ramping limits.
 
     Attributes
@@ -495,13 +497,16 @@ class rted(dcopf):
         ----------
         name : str
             Name of the system.
+        OutputFlag : int
+            1 to print info, 0 to suppress info.
         """
         super().__init__(name=name, OutputFlag=OutputFlag)
 
     def from_andes(self, ssa, no_build=False):
         super().from_andes(ssa, no_build=True)
         self.gen['p_pre'] = 0
-        if not no_build: self.build(info=False)
+        if not no_build:
+            self.build(info=False)
 
     def def_sfr(self, sfrur, sfrdr):
         """
@@ -510,9 +515,9 @@ class rted(dcopf):
         Parameters
         ----------
         sfru : float
-            SFR Up requirement.
+            SFR Up requirement [p.u.].
         sfrd: float
-            SFR Down requirement.
+            SFR Down requirement [p.u.].
         """
         self.sfrur = sfrur
         self.sfrdr = sfrdr
@@ -530,8 +535,10 @@ class rted(dcopf):
 
         Parameters
         ----------
-        skip_cost : bool
+        skip_cost: bool
             True to skip cost data check
+        info: bool
+            True to print info.
         """
         [warning_list, absent_list] = super().data_check(skip_cost=skip_cost, info=False)
         if not skip_cost:
@@ -564,7 +571,8 @@ class rted(dcopf):
         Parameters
         ----------
         info : bool
-        
+            True to print info.
+
         After build, following attributes will be available:
         `mdl`: model
         `pg`: Vars, power generation; named as ``pg``, indexed by `gen.idx`
@@ -649,6 +657,10 @@ class rted(dcopf):
             If True, will log the solving information.
         no_build: bool
             If True, will not call ``build()`` and use existing ``mdl``.
+        disable_sfr: bool
+            True to disable SFR constraints.
+        disable_ramp: bool
+            True to disable ramping constraints.
 
         Returns
         -------
@@ -662,14 +674,16 @@ class rted(dcopf):
         pru = [0] * self.gen.shape[0]
         prd = [0] * self.gen.shape[0]
         self.update_dict()
-        if not no_build: self.build(info=info)
+        if not no_build:
+            self.build(info=info)
         rl = []
         disable_list = []
         if disable_ramp:
             disable_list += [self.rampu, self.rampd]
             rl += ['rampu', 'rampd']
             logger.warning(f'{self.name} removed: {rl}')
-            for c in disable_list: self.mdl.remove(c)
+            for c in disable_list:
+                self.mdl.remove(c)
         if disable_sfr:
             # --- power balance ---
             self.mdl.addConstrs((self.pru[gen] <= 0 for gen in self.gendict.keys()), name='lsfru')
@@ -677,7 +691,8 @@ class rted(dcopf):
             logger.warning(f'{self.name} limited: sfru, sfrd')
         self.mdl.optimize()
         if self.mdl.Status == gb.GRB.OPTIMAL:
-            if info: logger.warning(f'{self.name} is solved.')
+            if info:
+                logger.warning(f'{self.name} is solved.')
             pg = []
             pru = []
             prd = []
@@ -689,7 +704,8 @@ class rted(dcopf):
             self.res_cost = self.mdl.getObjective().getValue()
             logger.warning(f'{self.name}: total cost={np.round(self.res_cost, 3)}')
         else:
-            if info: logger.warning('Optimization ended with status %d' % self.mdl.Status)
+            if info:
+                logger.warning('Optimization ended with status %d' % self.mdl.Status)
             pg = [0] * self.gen.shape[0]
             pru = [0] * self.gen.shape[0]
             prd = [0] * self.gen.shape[0]
@@ -711,7 +727,7 @@ class rted2(rted):
     where type2 generator is supported.
 
     In the modeling, cost of generation and SFR are minimized, s.t.:
-    power balance, line limits, generator active power limits,
+    power balance, line limits, generator active power limits, SFR reserves,
     and ramping limits.
 
     Attributes
@@ -739,6 +755,8 @@ class rted2(rted):
         ----------
         name : str
             Name of the system.
+        OutputFlag : int
+            1 to print info, 0 to suppress info.
         """
         super().__init__(name=name, OutputFlag=OutputFlag)
 
@@ -763,8 +781,10 @@ class rted2(rted):
 
         Parameters
         ----------
-        skip_cost : bool
+        skip_cost: bool
             True to skip cost data check
+        info: bool
+            True to print info.
         """
         [warning_list, absent_list] = super().data_check(skip_cost=skip_cost, info=False)
         if not skip_cost:
@@ -859,7 +879,33 @@ class rted2(rted):
         self.pgmin = pgminI | pgminII
         return self.mdl
 
+
 class rted3(rted2):
+    """
+    Real-time economic dispatch (RTED) using DCOPF,
+    where type2 generator is supported and SFR reserves are converted to soft
+    constraints with penalties on unmeet demand.
+
+    In the modeling, cost of generation and SFR are minimized, s.t.:
+    power balance, line limits, generator active power limits, SFR reserves,
+    and ramping limits.
+
+    Attributes
+    ----------
+    bus: pandas.DataFrame
+        Bus data.
+    gen: pandas.DataFrame
+        Generator data.
+    line: pandas.DataFrame
+        Line data.
+    load: pandas.DataFrame
+        Load data.
+    gen_gsf: pandas.DataFrame
+        Generator shift factor of gen bus data.
+    cost: pandas.DataFrame
+        Cost data.
+    """
+
     def __init__(self, name='RTED', OutputFlag=0):
         super().__init__(name=name, OutputFlag=OutputFlag)
 
