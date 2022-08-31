@@ -1,8 +1,8 @@
 # --- set up EV generator data ---
 ev_idx = 'PV_10'
-ssa.PV.set(src='p0', idx=ev_idx, attr='v', value=sse.data["Ptc"]/ssa.config.mva)
-ssa.PV.set(src='pmax', idx=ev_idx, attr='v', value=2*sse.Pu/ssa.config.mva)
-ssa.PV.set(src='pmin', idx=ev_idx, attr='v', value=2*sse.Pl/ssa.config.mva)
+ssa.PV.set(src='p0', idx=ev_idx, attr='v', value=30 / ssa.config.mva)
+ssa.PV.set(src='pmax', idx=ev_idx, attr='v', value=99999 / ssa.config.mva)
+ssa.PV.set(src='pmin', idx=ev_idx, attr='v', value=-99999 / ssa.config.mva)
 
 # --- setup pandapower: ssp ---
 ssp = to_pandapower(ssa)
@@ -31,16 +31,16 @@ ssd.build()
 ssd.gen.ctrl.loc[ev_idx] = 0
 
 # set EV geenrator as type2
-prumax = sse.g_frc()[0]
-prdmax = sse.g_frc()[1]
+prumax = 0
+prdmax = 0
 ssd.def_type2([ev_idx], [prumax], [prdmax])
 
 # Case data comes from a MPCE
 # https://ieeexplore.ieee.org/document/9018441
 # set ramp_5
-ramp_15 = [156, 120, 130, 110, 80, 105, 90, 90, 150, 999, 200]
+ramp_15 = [156, 120, 130, 110, 80, 105, 90, 90, 150, 99999, 200]
 # ramp_hour = [80, 80, 80, 50, 50, 50, 30, 30, 30, 999, 30]
-ssd.gen['ramp_5'] = np.array(ramp_15) / 3 / ssd.mva
+ssd.gen['ramp_5'] = 10 * np.array(ramp_15) / 3 / ssd.mva
 
 # set cost
 ssd.cost['c1'] = c1
@@ -49,7 +49,7 @@ ssd.cost['c0'] = c0
 
 # adjust SFR cost of EV lower than SynGen
 ssd.cost['cru'] = [0] * ssd.gen.shape[0]
-ssd.cost['cru'].loc[ev_idx] = - 0.000001
+ssd.cost['cru'].loc[ev_idx] = -1
 ssd.cost['crd'] = ssd.cost.cru
 
 # --- benchmark ssd with ssp using DCOPF ---

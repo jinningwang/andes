@@ -4,9 +4,9 @@ ssp.gen.max_p_mw = ssp.gen.max_p_mw
 # store original generator data
 ssp_gen0 = ssp.gen.copy()
 
-ssp.gen['p_mw'][ssp.gen.name==ev_idx] = sse.Ptc
-ssd.gen['p0'][ssd.gen.idx == ev_idx] = sse.Ptc / ssd.mva
-ssa.StaticGen.set(src='p0', attr='v', idx=ev_idx, value=sse.Ptc / ssa.config.mva)
+ssp.gen['p_mw'][ssp.gen.name==ev_idx] = sse.data["Ptc"]
+ssd.gen['p0'][ssd.gen.idx == ev_idx] = sse.data["Ptc"] / ssd.mva
+ssa.StaticGen.set(src='p0', attr='v', idx=ev_idx, value=sse.data["Ptc"] / ssa.config.mva)
 
 for end_time in range(t_total):  # t_total
     # --- interval RTED ---
@@ -15,8 +15,8 @@ for end_time in range(t_total):  # t_total
         # --- update load ---
         sfrur, sfrdr, load_exp = dp_calc(d_syn, idx_ed, intv_ed, rsfr)
         ssp.load['scaling'] = load_exp
-        ssp.gen['p_mw'][ssp.gen.name==ev_idx] = sse.Ptc
-        ssd.gen['p0'][ssd.gen.idx == ev_idx] = sse.Ptc / ssd.mva
+        ssp.gen['p_mw'][ssp.gen.name==ev_idx] = sse.data["Ptc"]
+        ssd.gen['p0'][ssd.gen.idx == ev_idx] = sse.data["Ptc"] / ssd.mva
         ssd.load['sf'] = load_exp
         ssd.update_dict()
 
@@ -31,11 +31,11 @@ for end_time in range(t_total):  # t_total
             ssd.gen.p_pre = vl.values
 
         # def. SFR requirements and calc. EV SFR capacities
-        k1 = ev_num['ne'][(ev_num['time'] >= sse.ts) & (ev_num['time'] <= sse.ts+1/12)].mean()
-        k0 = ev_num['ne'][ev_num['time'] >= sse.ts].iloc[0]
+        k1 = ev_num['ne'][(ev_num['time'] >= sse.data["ts"]) & (ev_num['time'] <= sse.data["ts"]+1/12)].mean()
+        k0 = ev_num['ne'][ev_num['time'] >= sse.data["ts"]].iloc[0]
         k = k1 / k0
         # estiamte FRC
-        [prumax, prdmax] = sse.g_frc(nea=sse.ne*k)
+        [prumax, prdmax] = sse.g_frc()  # check later
         # def. percentage of EV SFR capacities
         ssd.def_type2([ev_idx], [prumax*rru/ssd.mva], [prdmax*rrd/ssd.mva])
         ssd.def_sfr(sfrur=sfrur*ssa_p0_sum, sfrdr=sfrdr*ssa_p0_sum)
@@ -114,16 +114,16 @@ for end_time in range(t_total):  # t_total
             gref = ssa.TurbineGov.get(src='pref', attr='v', idx=agc_gov_idx)
             gout = ssa.TurbineGov.get(src='pout', attr='v', idx=agc_gov_idx)
             g_aux = gout - gref
-            agc_out[end_time] = np.append(g_aux, [sse.Prc/ssa.config.mva])
+            agc_out[end_time] = np.append(g_aux, [sse.data["Prc"]/ssa.config.mva])
 
         # --- assign AGC ---
         # a.SynGen
         # Note: now the condition is controllable & has governor
         ssa.TurbineGov.set(src='paux0', idx=agc_gov_idx, attr='v',
-                           value=agc_table.paux.values)
+                           value=agc_table["paux"][cond_agc_gov].values)
         # b.DG;
-        ssa.DG.set(src='pext0', idx=agc_dg_idx, attr='v',
-                   value=agc_table.paux.values)
+        ssa.DG.set(src='Pext0', idx=agc_dg_idx, attr='v',
+                   value=agc_table["paux"][cond_agc_dg].values)
         # c.EV;
         # Note: EV is in group DG, remove EV set if not used for EV SSM
         sse_agc = ssa.config.mva * agc_table[agc_table.stg_idx == ev_idx].paux.values
@@ -180,7 +180,7 @@ for end_time in range(t_total):  # t_total
         ev_agc_data[end_time] = sse.ev.agc.iloc[ridx]
         sse.report(is_report=False)
         ssa.EV2.set(src='pref0', idx=ac_res.dg_idx[ac_res.stg_idx == ev_idx].values[0],
-                    attr='v', value=sse.Ptc / ssa.config.mva)
+                    attr='v', value=sse.data["Ptc"] / ssa.config.mva)
 
     # run TDS
     ssa.TDS.config.tf = end_time

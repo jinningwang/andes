@@ -7,25 +7,54 @@ ddata_path = '/case/dsyn.csv'
 ddata = dir_path + ddata_path
 d_syn = pd.read_csv(ddata)
 
-# the coefficient can be adjusted to fit the case
-if caseH == 10:
-    d_syn['sload'] = 0.8*(d_syn['ha10'] - d_syn['ha10'].min()) / d_syn['ha10'].min() + 0.7
-if caseH == 18:
-    d_syn['sload'] = 0.8*(d_syn['ha18'] - d_syn['ha18'].min()) / d_syn['ha18'].min() + 0.7
+caseH = 18
 
-# extensify load fluctuation
-avg = d_syn['sload'].rolling(70).mean()
-d_syn['sload'] = 3 * (d_syn['sload'] - avg) + avg
+np.random.seed(2022)
+col = ['h10', 'h18', 'a10', 'a18']
+col1 = ['h10', 'h18']
+col2 = ['a10', 'a18']
+# d_syn['a10'].iloc[200:650] *= 0.5
+d_syn[col1] = (d_syn[col1] - d_syn[col1].min()) / d_syn[col1].min() + 0.8
+d_syn[col2] = (d_syn[col2] - d_syn[col2].mean()) / (d_syn[col2].max() - d_syn[col2].min())
+
+if caseH == 10:
+    k = 0.4  # the coefficient can be adjusted to fit the case
+    d_syn['s10'] = d_syn['h10'] + k * d_syn['a10']
+    d_syn['s18'] = d_syn['h18'] + k * d_syn['a18']
+    d_syn['sload'] = d_syn['s10']
+    # d_syn['sload'] = d_syn['sload'].rolling(10).mean().interpolate(method='polynomial', order=1, inplace=False)
+    # d_syn['sload'].iloc[0:310] -= 0.05 * k / 0.3
+    # # d_syn['sload'].iloc[250:350] = None
+    # # d_syn['sload'].iloc[250:350].interpolate(method='polynomial', order=3, inplace=True)
+    # d_syn['sload'].iloc[400:650] += 2 * (0.8 - d_syn['sload'].iloc[300:600])
+    # d_syn['sload'].iloc[600:900] += 0.02 * k / 0.3
+    # # d_syn['sload'].iloc[450:650] = None
+    # # d_syn['sload'].iloc[450:650].interpolate(method='polynomial', order=9, inplace=True)
+    # d_syn['sload'].iloc[900:1200] += 0.03 * k / 0.3
+    # d_syn['sload'].iloc[1200:1800] -= 0.06 * k / 0.3
+    # d_syn['sload'].iloc[2100:2400] += 0.02 * k / 0.3
+    # d_syn['sload'].iloc[2700:3000] -= 0.03 * k / 0.3
+    # d_syn['sload'].iloc[3300:3600] += 0.05 * k / 0.3
+if caseH == 18:
+    k = 0.3  # the coefficient can be adjusted to fit the case
+    d_syn['s10'] = d_syn['h10'] + k * d_syn['a10']
+    d_syn['s18'] = d_syn['h18'] + k * d_syn['a18']
+    d_syn['sload'] = d_syn['s10']
+    d_syn['sload'].iloc[0:300] -= 0.2 * k
+    # d_syn['sload'].iloc[200:700] = d_syn['sload'].iloc[200:700].rolling(80).mean()
+
+    # d_syn['sload'] = d_syn['sload'].rolling(10).mean().interpolate(method='polynomial', order=1, inplace=False)
+    # d_syn['sload'].iloc[100:600] = d_syn['sload'].iloc[100:600].rolling(10).mean().interpolate(method='polynomial', order=1, inplace=False)
 
 # calculate expected load
 step = 300
 d_exp = d_syn.groupby(d_syn.index // step).mean().copy()
 d_exp['time'] = range(0,3600,300)
 
-# align starting point of load with starting point of dispatch results
-d_syn['sload'][0] = d_exp['sload'].iloc[0]
-d_syn['sload'][1:100] = None
-d_syn['sload'] = d_syn['sload'].interpolate(method='polynomial', order=3)
+# # align starting point of load with starting point of dispatch results
+d_syn['sload'].iloc[0] = d_exp['sload'].iloc[0]
+d_syn['sload'].iloc[1:50] = None
+d_syn['sload'].interpolate(method='linear', inplace=True)
 
 # --- plot load curve ---
 fig_load, ax_load = plt.subplots(figsize=(5, 4))
