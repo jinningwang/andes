@@ -817,7 +817,7 @@ class ev_ssm():
                 self.data["Prc"] += np.sum(self.ev.agc * self.ev.Pc * (1 - self.ev['mod']) * (1 - self.ev['lc'])) * 1e-3
                 self.tsd = pd.concat([self.tsd, pd.DataFrame(data=self.data, index=[0])],
                              ignore_index=True)
-
+                self.tsd["Pr"].iloc[-1] = Pi_cap
                 self.n_step += 1
 
     def g_A(self, is_update=False):
