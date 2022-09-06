@@ -298,7 +298,9 @@ class ev_ssm():
                                   seed=seed,
                                   Np=int(tp/step), lr=lr, lp=lp,
                                   tt_mean=0.5, tt_var=0.02, tt_lb=0, tt_ub=1,
-                                  t_tol=0.1/3600, Pdbd=1e-4, name=name)
+                                  t_tol=0.1/3600, Pdbd=1e-4,
+                                  er_tol = 0.005, iter_tol=10,
+                                  name=name)
         # Pdbd: deadband of Power
         # --- 1a. uniform distribution parameters range ---
         self.ev_ufparam = dict(Ns=20,
@@ -487,8 +489,8 @@ class ev_ssm():
         self.ev['nam'] = self.ev['nam'].astype(int)
         # TODO: fix warning
         na_rid = self.ev[self.ev['na'] >= self.ev['nam']].index
-        self.ev['na'].iloc[na_rid] = self.ev['nam'].iloc[na_rid]
-        self.ev['lc'].iloc[na_rid] = 1
+        self.ev.iloc[na_rid, 24] = self.ev.iloc[na_rid, 25] # col "na", "nam"
+        self.ev.iloc[na_rid, 21] = 1 # col "lc"
         if self.config["ict_off"]:
             self.ev['lc'] = 0
         self.g_u()
@@ -817,7 +819,7 @@ class ev_ssm():
                 self.data["Prc"] += np.sum(self.ev.agc * self.ev.Pc * (1 - self.ev['mod']) * (1 - self.ev['lc'])) * 1e-3
                 self.tsd = pd.concat([self.tsd, pd.DataFrame(data=self.data, index=[0])],
                              ignore_index=True)
-                self.tsd["Pr"].iloc[-1] = Pi_cap
+                self.tsd.iloc[-1, 1] = Pi_cap # col "Pr"
                 self.n_step += 1
 
     def g_A(self, is_update=False):
@@ -1184,7 +1186,7 @@ class ev_ssm():
         # corrected control
         error = Pi - self.data["Pr"]
         iter = 0
-        while (abs(error) >= 0.005) & (iter < 10):
+        while (abs(error) >= self.config["er_tol"]) & (iter < self.config["iter_tol"]):
             error0 = error
             u, v, us, vs = self.g_agc(Pi - self.data["Pr"])
             # pereference signal
