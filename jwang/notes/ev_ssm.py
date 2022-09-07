@@ -481,12 +481,12 @@ class ev_ssm():
                                         (8000 - 400 * (self.ev['tf'] - self.data['ts'])) / (self.ev['soci'] * 100),
                                         loc=400 * (self.ev['tf'] - self.data['ts']), scale=self.ev['soci'] * 100).rvs(self.ev.shape[0],
                                                                                                                       random_state=self.config["seed"])
-        self.ev['na'] = self.ev['na'].astype(int)
+        self.ev['na'] = self.ev['na'].astype(float)
 
         # max number of actions
         self.ev['nam'] = ((self.ev['tf'].mean() - self.ev['ts'].mean()) * self.ev['Pc'].mean() * self.ev['nc'].mean()
                           - self.ev['socd'] * self.ev['Q']) / (self.ev['Pc'].mean() * self.ev['nc'].mean() * 4 / 3600)
-        self.ev['nam'] = self.ev['nam'].astype(int)
+        self.ev['nam'] = self.ev['nam'].astype(float)
         # TODO: fix warning
         na_rid = self.ev[self.ev['na'] >= self.ev['nam']].index
         self.ev.iloc[na_rid, 24] = self.ev.iloc[na_rid, 25]  # col "na", "nam"
@@ -1227,10 +1227,10 @@ class ev_ssm():
         # number of actions
         self.ev['na'] += (self.ev['soc'] < self.ev['socd']) - self.ev['c']
         if not self.config["ict_off"]:
-            lc0 = self.ev['lc'].copy().astype(bool)
+            lc0 = self.ev['lc'].copy().astype(float)
             self.ev['lc'] = self.ev['na'] >= self.ev['nam']
             self.ev['lc'] = self.ev['lc'] | lc0  # once lc, never response again
-        self.ev['lc'] = self.ev['lc'].astype(int)
+        self.ev['lc'] = self.ev['lc'].astype(float)
 
         self.uv = [u, v, us, vs, usp, vsp]
         # TODO: ps array
