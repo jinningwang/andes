@@ -1,3 +1,6 @@
+import matplotlib.font_manager
+plt.style.use('ieee')
+
 right = end_time
 
 # data format conversion
@@ -14,13 +17,7 @@ sfr_res['in'] = sfr_res['in'] * ssa.config.mva
 agc_smooth = pd.DataFrame(np.repeat(agc_in[list(np.arange(0, t_total, 4))].values, 4, axis=1),
                           columns=list(np.arange(0, t_total, 1)))
 # Record EV output
-sse_out = pd.DataFrame()
-sse_out['time'] = sse.tss
-sse_out['agc'] = agc_smooth.iloc[10]  # AGC input to EV
-sse_out['Pr'] = sse.Prl
-sse_out['Prc'] = sse.Prcl
-sse_out['ne'] = sse.nel
-sse_out['Pt'] = sse.Ptl
+sse_out = sse.tsd.copy()
 
 fig_gen, ax_gen = plt.subplots(2, 3, figsize=(16, 8))
 plt.subplots_adjust(left=None, bottom=None, right=None,
@@ -49,8 +46,8 @@ ssa.TDS.plt.plot(ssa.TGOV1N.paux,
                  fig=fig_gen, ax=ax_gen[0, 1])
 
 # Plot EV AGC response, hard code
-ax_gen[0, 1].plot(3600*(np.array(sse.tss)-caseH), sse.Prl, color='tab:orange', linestyle=':')
-ax_gen[0, 1].plot(3600*(np.array(sse.tss)-caseH), sse.Prcl, color='tab:orange', linestyle='-')
+ax_gen[0, 1].plot(3600*(np.array(sse.tsd['ts'])-caseH), sse.tsd['Pr'], color='tab:orange', linestyle=':')
+ax_gen[0, 1].plot(3600*(np.array(sse.tsd['ts'])-caseH), sse.tsd['Prc'], color='tab:orange', linestyle='-')
 # ax_gen[0, 1].set_ylim(top=max(1.2 * max(sse.Prl), ax_gen[0, 1].get_ylim()))
 
 ax_gen[0, 2].plot(sfr_res.time,
@@ -106,9 +103,7 @@ bu_df = pd.DataFrame(bu, columns=col)
 bd_df = pd.DataFrame(bd, columns=col)
 pg_df = pd.DataFrame(pg, columns=col)
 
-import matplotlib.font_manager
 plt.style.use('ieee')
-
 color = ['tab:blue', 'yellow', 'tab:green',
          'tab:red', 'tab:purple', 'tab:brown',
          'tab:pink', 'tab:gray', 'tab:olive', 'tab:cyan', 'tab:orange']
@@ -124,7 +119,7 @@ bd_df[new_cols].plot.bar(stacked=True, ax=axes[1], legend=False, color=color)
 for ax in axes:
     ax.tick_params(axis='x', labelrotation = 0)
     ax.set_ylim([0, 1])
-    ax.set_yticklabels([f'{np.round(i*100,0)}\%' for i in np.arange(0, 1.1, 0.2)])
+    ax.set_yticklabels([f'{np.round(i*100,0)}%' for i in np.arange(0, 1.1, 0.2)])
     ax.set_xticklabels([i for i in range(1,13,1)])
     ax.set_xlabel('RTED interval')
 axes[0].set_title('(a) Case 1: RegUp balancing factor')
