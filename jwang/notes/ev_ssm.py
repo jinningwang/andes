@@ -221,21 +221,20 @@ class ev_ssm():
         # --- EV summary info ---
         self.Q = self.ev.Q.sum()/1e3
         self.ev['wQ'] = self.ev['Q'] * self.ev['u']
-        self.wQ = self.ev.wQ.sum()/1e3
+        self.wQ = self.ev['wQ'].sum()/1e3
         self.ev['wsoc'] = self.ev['soc'] * self.ev['Q'] * self.ev['u']
         self.wsoc = self.ev['wsoc'].sum() / self.wQ / 1e3
-
-        masku = self.ev[(self.ev['u'] == 1) & (self.ev['c'].values > 0)].index
-        maskl = self.ev[(self.ev['u'] == 1) & (self.ev['c'].values < 0)].index
+        masku = self.ev[(self.ev['u'] > 0) & (self.ev['c'] > 0)].index
+        maskl = self.ev[(self.ev['u'] > 0) & (self.ev['c'] < 0)].index
         self.ev['Ps'] = 0
-        self.ev.loc[masku, 'Ps'] =  self.ev.loc[masku, 'Pc']
+        self.ev.loc[masku, 'Ps'] =  -1 * -1 * self.ev.loc[masku, 'Pc']
         self.ev.loc[maskl, 'Ps'] =  -1 * self.ev.loc[maskl, 'Pd']
-        self.data['Ptc'] = -1 * self.ev.Ps.sum()/1e3
-        self.data['Pcc'] = -1 * self.ev.loc[masku, 'Ps'] .sum()/1e3
-        self.data['Pdc'] = -1 * self.ev.loc[maskl, 'Ps'] .sum()/1e3
+        self.data['Ptc'] = -1 * self.ev['Ps'].sum()/1e3
+        self.data['Pcc'] = -1 * self.ev.loc[masku, 'Ps'].sum()/1e3
+        self.data['Pdc'] = -1 * self.ev.loc[maskl, 'Ps'].sum()/1e3
         self.ev.drop(columns=['wQ', 'wsoc', 'Ps'], inplace=True)
 
-        cid = self.ev[self.ev.u == 1].c.value_counts().to_dict()
+        cid = self.ev['c'][self.ev['u'] == 1].value_counts().to_dict()
         msg_c = "Ctrl: "
         for key in cid.keys():
             msg_c += f"{key}={cid[key]}; "
@@ -510,8 +509,8 @@ class ev_ssm():
         self.ev['nam'] = self.ev['nam'].astype(int)
         # TODO: fix warning
         na_rid = self.ev[self.ev['na'].values >= self.ev['nam'].values].index
-        self.ev.iloc[na_rid, 24] = self.ev.iloc[na_rid, 25]  # col "na", "nam"
-        self.ev.iloc[na_rid, 21] = 1  # col "lc"
+        self.ev.loc[na_rid, "na"] = self.ev.loc[na_rid, "nam"]  # col "na", "nam"
+        self.ev.loc[na_rid, "lc"] = 1  # col "lc"
         if self.config["ict_off"]:
             self.ev['lc'] = 0
         self.g_u()
@@ -532,7 +531,7 @@ class ev_ssm():
         Update online status of EV at given time.
         """
         # --- online status ---
-        self.ev['u0'] = self.ev.u.astype(int)
+        self.ev['u0'] = self.ev["u"].values.astype(int)
         self.ev['u'] = (self.ev.ts <= self.data["ts"]) & (self.ev.tf >= self.data["ts"])
         self.ev['u'] = self.ev['u'].astype(int)
         self.data["ne"] = self.ev.u.sum()  # number of online EVs
@@ -801,7 +800,7 @@ class ev_ssm():
                            "simulation will not start.")
         else:
             for t in tqdm(np.arange(self.data["ts"], tf + 0.1/3600, t_step), desc=f'{self.config["name"]} MCS', disable=disable):
-                if abs(t - self.data["ts"]) < 1e-6:
+                if abs(t - self.data["ts"]) < self.config["t_tol"]:
                     continue
                 # --- update SSM A ---
                 if self.n_step % self.config["Np"] == 0:
@@ -811,7 +810,6 @@ class ev_ssm():
                         self.r_state()
                         Per = self.data["Prc"] - self.data["Pr"]  # error of AGC response
                     self.report(is_report=False)
-
                 self.data["ts"] = self.g_ts(t)
                 self.g_u()  # update online status
                 # TODO: add warning when Pi is 0
@@ -819,26 +817,30 @@ class ev_ssm():
                 self.g_c(Pi=Pi_input, is_test=is_test)  # update control signal
                 # --- update soc interval and online status ---
                 # charging/discharging power, kW
-                self.ev['dP'] = self.ev[['Pc', 'Pd', 'nc', 'nd', 'c', 'u']].apply(
-                    lambda x: x[0]*x[2]*x[4] if x[4] >= 0 else -1*x[1]*x[3]*x[4], axis=1)
+                self.ev['dP'] = 0
+                masku = self.ev[self.ev['c'].astype(float) > 0].index.astype(int)
+                maskl = self.ev[self.ev['c'].astype(float) < 0].index.astype(int)
+                self.ev.loc[masku, 'dP'] = self.ev.loc[masku, 'Pc'] * self.ev.loc[masku, 'nc']
+                self.ev.loc[maskl, 'dP'] = self.ev.loc[maskl, 'Pd'] * self.ev.loc[maskl, 'nd']
+                self.ev['dP'] = self.ev['dP'] * self.ev['u']
                 # --- update and modify SoC ---
-                self.ev['soc'] = self.ev.soc + t_step * self.ev['dP'] / self.ev['Q']
-                masku = self.ev['soc'].values >= self.socu
-                maskl = self.ev['soc'].values <= self.socl
-                self.ev.loc[masku,'soc'] = self.socu
-                self.ev.loc[maskl,'soc'] = self.socl
-
+                self.ev['soc'] = self.ev['soc'] + t_step * self.ev['dP'] / self.ev['Q']
+                masku = self.ev[self.ev['soc'].astype(float) >= self.socu].index
+                maskl = self.ev[self.ev['soc'].astype(float) <= self.socl].index
+                self.ev.loc[masku, 'soc'] = self.socu
+                self.ev.loc[maskl, 'soc'] = self.socl
+                
                 # --- update x ---
                 self.find_sx()
                 self.g_x()
 
                 if is_updateA:
                     self.g_xl()
-
                 self.report(is_report=False)  # record power
                 # Actual AGC response: AGC switched power if not modified. (MW)
                 self.data["Prc"] += np.sum(self.ev.agc * self.ev.Pc *
                                            (1 - self.ev['mod']) * (1 - self.ev['lc'])) * 1e-3
+                
                 self.tsd = pd.concat([self.tsd, pd.DataFrame(data=self.data, index=[0])],
                                      ignore_index=True)
                 self.tsd.iloc[-1, 1] = Pi  # col "Pr"
@@ -912,7 +914,7 @@ class ev_ssm():
             test mode: only revise control signal
         """
         # record last ctrl signal
-        self.ev['c0'] = self.ev['c2']
+        self.ev['c0'] = self.ev['c2'].copy()
 
         if is_test:
             pass
@@ -927,31 +929,24 @@ class ev_ssm():
             # --- revise control ---
             # `CS` for low charged EVs, and set 'lc' to 1
             # self.ev['lc'] = self.ev['lc'].astype(bool)
-            maskl = self.ev['lc'][self.ev['soc'] <= self.sl].index
-            self.ev.loc[maskl, ['lc', 'c']] = 1
+            mask = self.ev[self.ev['soc'] <= self.sl].index
+            self.ev.loc[mask, ['lc', 'c']] = 1
             self.ev['mod'] = 0
-            self.ev.loc[maskl, 'mod'] = 1
-            self.ev['lc'] = self.ev[['soc', 'c', 'lc']].apply(
-                lambda x: 1 if x[0] <= self.sl else x[2], axis=1)
-            self.ev['c'] = self.ev[['c', 'lc']].apply(
-                lambda x: 1 if x[1] else x[0], axis=1)
-            self.ev['mod'] = self.ev[['soc', 'c']].apply(
-                lambda x: 1 if x[0] <= self.sl else 0, axis=1)
+            self.ev.loc[mask, 'mod'] = 1
             # `CS` for just arrived EVs
-            self.ev['c'] = self.ev[['u0', 'u', 'c']].apply(
-                lambda x: 1 if (x[0] == 0) & (x[1] == 1) else x[2], axis=1)
+            mask = self.ev[(self.ev['u0'] == 0) & (self.ev['u'] == 1)].index
+            self.ev.loc[mask, 'c'] = 1
             # `CS` for lc
-            self.ev['c'] = self.ev[['u', 'lc', 'c']].apply(
-                lambda x: 1 if (x[0] == 1) & (x[1] == 1) else x[2], axis=1)
+            mask = self.ev[(self.ev['u'] == 1) & (self.ev['lc'] == 1)].index
+            self.ev.loc[mask, 'c'] = 1
             # `IS` for demanded charging [96%:x[2]] SoC EVs
-            self.ev['c'] = self.ev[['soc', 'c', 'socd']].apply(
-                lambda x: 0 if (x[0] >= x[2]) & (x[1] == 1) else x[1], axis=1)
-            self.ev['mod'] = self.ev[['soc', 'c', 'socd']].apply(
-                lambda x: 1 if (x[0] >= x[2]) & (x[1] == 1) else 0, axis=1)
+            mask = self.ev[(self.ev['soc'] >= self.ev['socd']) & (self.ev['c'] == 1)].index
+            self.ev.loc[mask, 'c'] = 1
+            self.ev['mod'] = 0
+            self.ev.loc[mask, 'mod'] = 0
 
         # `IS` for offline EVs
-        self.ev['c'] = self.ev[['c', 'u']].apply(
-            lambda x: x[0]*x[1], axis=1)
+        self.ev['c'] = self.ev['c'].astype(float) * self.ev['u'].astype(float)
         # reformat to [0, 1, 2]
         self.ev['c2'] = self.ev['c'].replace({1: 0, 0: 1, -1: 2})
         # format
@@ -1261,10 +1256,10 @@ class ev_ssm():
         # number of actions
         self.ev['na'] += (self.ev['soc'].values < self.ev['socd'].values) - self.ev['c'].values
         if not self.config["ict_off"]:
-            lc0 = self.ev['lc'].values.copy().astype(bool)
+            lc0 = self.ev['lc'].values.copy().astype(int)
             self.ev['lc'] = self.ev['na'].values >= self.ev['nam'].values
             self.ev['lc'] = self.ev['lc'].values | lc0  # once lc, never response again
-        self.ev['lc'] = self.ev['lc'].astype(bool)
+        self.ev['lc'] = self.ev['lc'].astype(int)
 
         self.uv = [u, v, us, vs, usp, vsp]
         # TODO: ps array
