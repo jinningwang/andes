@@ -7,6 +7,17 @@ import numpy as np
 import scipy.stats as stats
 import matplotlib.pyplot as plt
 from collections import OrderedDict
+import swifter
+from swifter import set_defaults
+set_defaults(
+    npartitions=None,
+    dask_threshold=1,
+    scheduler="processes",
+    progress_bar=False,
+    progress_bar_desc=None,
+    allow_dask_on_strings=False,
+    force_parallel=True,
+)
 
 import logging
 logger = logging.getLogger(__name__)
@@ -213,11 +224,15 @@ class ev_ssm():
         self.wQ = self.ev.wQ.sum()/1e3
         self.ev['wsoc'] = self.ev['soc'] * self.ev['Q'] * self.ev['u']
         self.wsoc = self.ev['wsoc'].sum() / self.wQ / 1e3
-        self.ev['Ps'] = self.ev[['u', 'c', 'Pc', 'Pd']].apply(
-            lambda x: x[0]*x[1]*x[2] if x[1] >= 0 else x[0]*x[1]*x[3], axis=1)
+
+        masku = self.ev[(self.ev['u'] == 1) & (self.ev['c'].values > 0)].index
+        maskl = self.ev[(self.ev['u'] == 1) & (self.ev['c'].values < 0)].index
+        self.ev['Ps'] = 0
+        self.ev.loc[masku, 'Ps'] =  self.ev.loc[masku, 'Pc']
+        self.ev.loc[maskl, 'Ps'] =  -1 * self.ev.loc[maskl, 'Pd']
         self.data['Ptc'] = -1 * self.ev.Ps.sum()/1e3
-        self.data['Pcc'] = -1 * self.ev.Ps[self.ev.Ps > 0].sum()/1e3
-        self.data['Pdc'] = -1 * self.ev.Ps[self.ev.Ps < 0].sum()/1e3
+        self.data['Pcc'] = -1 * self.ev.loc[masku, 'Ps'] .sum()/1e3
+        self.data['Pdc'] = -1 * self.ev.loc[maskl, 'Ps'] .sum()/1e3
         self.ev.drop(columns=['wQ', 'wsoc', 'Ps'], inplace=True)
 
         cid = self.ev[self.ev.u == 1].c.value_counts().to_dict()
@@ -433,9 +448,15 @@ class ev_ssm():
         # soc is initialized considering random behavior
         self.ev['soc'] = self.ev[['soci', 'ts', 'Pc', 'nc', 'Q', 'tf']].apply(
             lambda x: x[0] + (min(self.data['ts']-x[1], x[5]-x[1]))*x[2]*x[3]/x[4] if self.data['ts'] > x[1] else x[0], axis=1)
-        self.ev['soc'] = self.ev['soc'].apply(lambda x: min(x, self.socu))
-        self.ev['soc'] = self.ev['soc'].apply(lambda x: max(x, self.socl))
-        self.ev['bd'] = self.ev.soc.apply(lambda x: 1 if (x <= self.sl) | (x >= self.su) else 0)
+        masku = self.ev['soc'].values >= self.socu
+        maskl = self.ev['soc'].values <= self.socl
+        self.ev.loc[masku,'soc'] = self.socu
+        self.ev.loc[maskl,'soc'] = self.socl
+        mask_bd1 = self.ev['soc'].values <= self.sl
+        mask_bd2 = self.ev['soc'].values >= self.su
+        mask_bd = mask_bd1 | mask_bd2
+        self.ev['bd'] = 0
+        self.ev.loc[mask_bd, 'bd'] = 1
 
         self.ev['lc'] = 0  # low charge, 0 for regular, 1 for low charge
         # --- ev online status: u0 as u ---
@@ -481,14 +502,14 @@ class ev_ssm():
                                         (8000 - 400 * (self.ev['tf'] - self.data['ts'])) / (self.ev['soci'] * 100),
                                         loc=400 * (self.ev['tf'] - self.data['ts']), scale=self.ev['soci'] * 100).rvs(self.ev.shape[0],
                                                                                                                       random_state=self.config["seed"])
-        self.ev['na'] = self.ev['na'].astype(float)
+        self.ev['na'] = self.ev['na'].astype(int)
 
         # max number of actions
         self.ev['nam'] = ((self.ev['tf'].mean() - self.ev['ts'].mean()) * self.ev['Pc'].mean() * self.ev['nc'].mean()
                           - self.ev['socd'] * self.ev['Q']) / (self.ev['Pc'].mean() * self.ev['nc'].mean() * 4 / 3600)
-        self.ev['nam'] = self.ev['nam'].astype(float)
+        self.ev['nam'] = self.ev['nam'].astype(int)
         # TODO: fix warning
-        na_rid = self.ev[self.ev['na'] >= self.ev['nam']].index
+        na_rid = self.ev[self.ev['na'].values >= self.ev['nam'].values].index
         self.ev.iloc[na_rid, 24] = self.ev.iloc[na_rid, 25]  # col "na", "nam"
         self.ev.iloc[na_rid, 21] = 1  # col "lc"
         if self.config["ict_off"]:
@@ -714,8 +735,10 @@ class ev_ssm():
                 lambda x: x[0]*x[2]*x[5]*x[4] if x[4] >= 0 else x[1]*x[3]*x[5]*x[4], axis=1)
             # --- update and modify SoC ---
             self.ev['soc'] = self.ev.soc + t_step * self.ev['dP'] / self.ev['Q']
-            self.ev['soc'] = self.ev['soc'].apply(lambda x: x if x < self.socu else self.socu)
-            self.ev['soc'] = self.ev['soc'].apply(lambda x: x if x > self.socl else self.socl)
+            masku = self.ev['soc'].values >= self.socu
+            maskl = self.ev['soc'].values <= self.socl
+            self.ev.loc[masku,'soc'] = self.socu
+            self.ev.loc[maskl,'soc'] = self.socl
             self.ev['soc'] = self.ev.soc + t_step * self.ev['dP'] / self.ev['Q']
             # --- boundary ---
             self.ev['bd'] = self.ev[['soc', 'socd']].apply(
@@ -800,8 +823,10 @@ class ev_ssm():
                     lambda x: x[0]*x[2]*x[4] if x[4] >= 0 else -1*x[1]*x[3]*x[4], axis=1)
                 # --- update and modify SoC ---
                 self.ev['soc'] = self.ev.soc + t_step * self.ev['dP'] / self.ev['Q']
-                self.ev['soc'] = self.ev['soc'].apply(lambda x: x if x < self.socu else self.socu)
-                self.ev['soc'] = self.ev['soc'].apply(lambda x: x if x > self.socl else self.socl)
+                masku = self.ev['soc'].values >= self.socu
+                maskl = self.ev['soc'].values <= self.socl
+                self.ev.loc[masku,'soc'] = self.socu
+                self.ev.loc[maskl,'soc'] = self.socl
 
                 # --- update x ---
                 self.find_sx()
@@ -1025,13 +1050,18 @@ class ev_ssm():
         out: list of float
             [Pt, Pc, Pd, Pu, Pl] (MW)
         """
-        self.ev['Ps'] = self.ev[['Pc', 'c', 'Pd']].apply(lambda x: x[0]*x[1] if x[1] >= 0 else x[2]*x[1], axis=1)
-        Pt = - self.ev['Ps'].sum()
-        Pc = - self.ev['Ps'][self.ev['Ps'] > 0].sum()
-        Pd = self.ev['Ps'][self.ev['Ps'] < 0].sum()
-        Pl = - self.ev[self.ev.u == 1]['Pc'].sum()
-        Pu = self.ev[self.ev.u == 1]['Pd'].sum()
+        masku = self.ev[(self.ev['u'] == 1) & (self.ev['c'].values > 0)].index
+        maskl = self.ev[(self.ev['u'] == 1) & (self.ev['c'].values < 0)].index
+        self.ev['Ps'] = 0
+        self.ev.loc[masku, 'Ps'] =  self.ev.loc[masku, 'Pc']
+        self.ev.loc[maskl, 'Ps'] =  -1 * self.ev.loc[maskl, 'Pd']
 
+        Pt = - self.ev['Ps'].to_numpy().sum()
+        Pc = - self.ev['Ps'][self.ev['Ps'].values > 0].sum()
+        Pd = self.ev['Ps'][self.ev['Ps'].values < 0].sum()
+        ue1_ridx = self.ev[self.ev["u"].values == 1].index
+        Pl = - self.ev['Pc'].iloc[ue1_ridx].sum()
+        Pu = self.ev['Pd'].iloc[ue1_ridx].sum()
         self.ev.drop(['Ps'], axis=1, inplace=True)
 
         out = [Pt, Pu, Pl, Pc, Pd]
@@ -1225,12 +1255,12 @@ class ev_ssm():
                 break
 
         # number of actions
-        self.ev['na'] += (self.ev['soc'] < self.ev['socd']) - self.ev['c']
+        self.ev['na'] += (self.ev['soc'].values < self.ev['socd'].values) - self.ev['c'].values
         if not self.config["ict_off"]:
-            lc0 = self.ev['lc'].copy().astype(float)
-            self.ev['lc'] = self.ev['na'] >= self.ev['nam']
-            self.ev['lc'] = self.ev['lc'] | lc0  # once lc, never response again
-        self.ev['lc'] = self.ev['lc'].astype(float)
+            lc0 = self.ev['lc'].values.copy().astype(bool)
+            self.ev['lc'] = self.ev['na'].values >= self.ev['nam'].values
+            self.ev['lc'] = self.ev['lc'].values | lc0  # once lc, never response again
+        self.ev['lc'] = self.ev['lc'].astype(bool)
 
         self.uv = [u, v, us, vs, usp, vsp]
         # TODO: ps array
