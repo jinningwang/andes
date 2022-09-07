@@ -927,6 +927,10 @@ class ev_ssm():
             # --- revise control ---
             # `CS` for low charged EVs, and set 'lc' to 1
             # self.ev['lc'] = self.ev['lc'].astype(bool)
+            maskl = self.ev['lc'][self.ev['soc'] <= self.sl].index
+            self.ev.loc[maskl, ['lc', 'c']] = 1
+            self.ev['mod'] = 0
+            self.ev.loc[maskl, 'mod'] = 1
             self.ev['lc'] = self.ev[['soc', 'c', 'lc']].apply(
                 lambda x: 1 if x[0] <= self.sl else x[2], axis=1)
             self.ev['c'] = self.ev[['c', 'lc']].apply(
