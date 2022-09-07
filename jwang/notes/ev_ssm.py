@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 def r_agc_sev(evs, us, vs, usp, vsp):
     """
     Single EV reacts to AGC control signal `us` `vs`.
-    
+
     Parameters
     ----------
     evs: list
@@ -67,14 +67,14 @@ def r_agc_sev(evs, us, vs, usp, vsp):
 def find_x(x, soc_intv):
     """
     Find soc interval of a single EV.
-    
+
     Parameters
     ----------
     x: float
         SOC of a single EV.
     soc_intv: dict
         dict of SOC intervals.
-    
+
     Returns
     -------
     out: int
@@ -90,7 +90,7 @@ def find_x(x, soc_intv):
 def update_xl(inl_input):
     """
     Update online staus records, x series.
-    
+
     Parameters:
     inl_input: dict
         Single EV information, ['sx', 'xl', 'u', 'u0', 'c2', 'ts', 'c0', 'bd']
@@ -126,7 +126,7 @@ def update_xl(inl_input):
 def safe_div(x, y):
     """
     Safe division, return 0 if y is 0.
-    
+
     Parameters
     ----------
     x: float
@@ -201,7 +201,7 @@ class ev_ssm():
     def report(self, is_report=True):
         """
         Report EVA info.
-        
+
         Parameters
         ----------
         is_report: bool
@@ -235,7 +235,7 @@ class ev_ssm():
     def g_ts(self, ts):
         """
         Update time and time series.
-        
+
         Parameters
         ----------
         ts: float
@@ -299,7 +299,7 @@ class ev_ssm():
                                   Np=int(tp/step), lr=lr, lp=lp,
                                   tt_mean=0.5, tt_var=0.02, tt_lb=0, tt_ub=1,
                                   t_tol=0.1/3600, Pdbd=1e-4,
-                                  er_tol = 0.005, iter_tol=10,
+                                  er_tol=0.005, iter_tol=10,
                                   name=name)
         # Pdbd: deadband of Power
         # --- 1a. uniform distribution parameters range ---
@@ -339,7 +339,7 @@ class ev_ssm():
         # --- adaptive soc coeff ---
         sdu = self.ev['socd'].max()
         sdl = self.ev['socd'].min()
-        Qave = self.ev['Q'].mean() / 1e3 # MWh
+        Qave = self.ev['Q'].mean() / 1e3  # MWh
         ncave = self.ev['nc'].mean()
         self.Th = (sdu - sdl) * Qave / (2 * self.Pave * ncave)
 
@@ -466,8 +466,8 @@ class ev_ssm():
         # lower one is preferred to be firstly chosen to response AGC
         self.pref = list(range(self.config["n_pref"]))
         self.rho = [1 / self.config["n_pref"]] * self.config["n_pref"]
-        self.ev['pref'] = np.random.choice(self.pref, p = self.rho,
-                                           size = self.config["N"])
+        self.ev['pref'] = np.random.choice(self.pref, p=self.rho,
+                                           size=self.config["N"])
 
         ev_cols = ['u', 'u0',  'soc', 'bd', 'c', 'c2', 'c0', 'sx', 'dP', 'xl',
                    'soci', 'socd', 'Pc', 'Pd', 'nc', 'nd', 'Q', 'ts', 'tf', 'tt',
@@ -480,7 +480,7 @@ class ev_ssm():
         self.ev['na'] = stats.truncnorm((-2000 - 400 * (self.ev['tf'] - self.data['ts'])) / (self.ev['soci'] * 100),
                                         (8000 - 400 * (self.ev['tf'] - self.data['ts'])) / (self.ev['soci'] * 100),
                                         loc=400 * (self.ev['tf'] - self.data['ts']), scale=self.ev['soci'] * 100).rvs(self.ev.shape[0],
-                                                                                                         random_state=self.config["seed"])
+                                                                                                                      random_state=self.config["seed"])
         self.ev['na'] = self.ev['na'].astype(int)
 
         # max number of actions
@@ -489,8 +489,8 @@ class ev_ssm():
         self.ev['nam'] = self.ev['nam'].astype(int)
         # TODO: fix warning
         na_rid = self.ev[self.ev['na'] >= self.ev['nam']].index
-        self.ev.iloc[na_rid, 24] = self.ev.iloc[na_rid, 25] # col "na", "nam"
-        self.ev.iloc[na_rid, 21] = 1 # col "lc"
+        self.ev.iloc[na_rid, 24] = self.ev.iloc[na_rid, 25]  # col "na", "nam"
+        self.ev.iloc[na_rid, 21] = 1  # col "lc"
         if self.config["ict_off"]:
             self.ev['lc'] = 0
         self.g_u()
@@ -516,7 +516,7 @@ class ev_ssm():
         self.ev['u'] = self.ev['u'].astype(int)
         self.data["ne"] = self.ev.u.sum()  # number of online EVs
         # number of online and non low-charge EVs
-        self.data["nec"] = self.ev[(self.ev['lc']==0) & (self.ev['u']==1)].shape[0]
+        self.data["nec"] = self.ev[(self.ev['lc'] == 0) & (self.ev['u'] == 1)].shape[0]
         return True
 
     def g_x(self):
@@ -598,7 +598,7 @@ class ev_ssm():
         """
         plt.style.use(style)
         fig_agc, ax_agc = plt.subplots(figsize=figsize, **kwargs)
-        self.tsd['ts2'] = 3600* (self.tsd['ts'] - self.tsd['ts'].iloc[0])
+        self.tsd['ts2'] = 3600 * (self.tsd['ts'] - self.tsd['ts'].iloc[0])
         if tu == 's':
             x = 'ts2'
             xlabel = 'Time [s]'
@@ -634,7 +634,7 @@ class ev_ssm():
         """
         plt.style.use(style)
         fig_ev, ax_ev = plt.subplots(figsize=figsize, **kwargs)
-        self.tsd['ts2'] = 3600* (self.tsd['ts'] - self.tsd['ts'].iloc[0])
+        self.tsd['ts2'] = 3600 * (self.tsd['ts'] - self.tsd['ts'].iloc[0])
         if tu == 's':
             x = 'ts2'
             xlabel = 'Time [s]'
@@ -796,7 +796,7 @@ class ev_ssm():
                     Pi_cap = min(Pi, self.prumax)
                 elif Pi < 0:
                     Pi_cap = max(Pi, -1*self.prdmax)
-                Pi_input = Pi_cap - (1 - self.config["ecc_off"]) * Per# * self.data["Per"]
+                Pi_input = Pi_cap - (1 - self.config["ecc_off"]) * Per  # * self.data["Per"]
                 self.g_c(Pi=Pi_input, is_test=is_test)  # update control signal
                 # --- update soc interval and online status ---
                 # charging/discharging power, kW
@@ -816,10 +816,11 @@ class ev_ssm():
 
                 self.report(is_report=False)  # record power
                 # Actual AGC response: AGC switched power if not modified. (MW)
-                self.data["Prc"] += np.sum(self.ev.agc * self.ev.Pc * (1 - self.ev['mod']) * (1 - self.ev['lc'])) * 1e-3
+                self.data["Prc"] += np.sum(self.ev.agc * self.ev.Pc *
+                                           (1 - self.ev['mod']) * (1 - self.ev['lc'])) * 1e-3
                 self.tsd = pd.concat([self.tsd, pd.DataFrame(data=self.data, index=[0])],
-                             ignore_index=True)
-                self.tsd.iloc[-1, 1] = Pi_cap # col "Pr"
+                                     ignore_index=True)
+                self.tsd.iloc[-1, 1] = Pi_cap  # col "Pr"
                 self.n_step += 1
 
     def g_A(self, is_update=False):
@@ -1176,6 +1177,10 @@ class ev_ssm():
         vsp: numpy.ndarray
             (Ns+1, n_pref), probability mode (b), (c) with pereference: IS - DS
         """
+        if Pi >= 0:
+            Pi_cap = min(Pi, self.prumax)
+        elif Pi < 0:
+            Pi_cap = max(Pi, -1*self.prdmax)
         # initialize output
         u = np.zeros(self.Ns)
         v = np.zeros(self.Ns)
@@ -1184,7 +1189,7 @@ class ev_ssm():
         usp = np.repeat(us.reshape(self.Ns+1, 1), self.config["n_pref"], axis=1)
         vsp = np.repeat(vs.reshape(self.Ns+1, 1), self.config["n_pref"], axis=1)
         # corrected control
-        error = Pi - self.data["Pr"]
+        error = Pi_cap - self.data["Pr"]
         iter = 0
         while (abs(error) >= self.config["er_tol"]) & (iter < self.config["iter_tol"]):
             error0 = error
@@ -1213,15 +1218,13 @@ class ev_ssm():
             # --- record output ---
             # TODO: modification of random traveling behavior
             self.x0 = self.x0 + np.matmul(self.B, u) + np.matmul(self.C, v)
-
             # dx0 = np.matmul(self.B, u) + np.matmul(self.C, v)
             # self.data["Pr"] = np.matmul(self.D, dx0)[0]
             self.data["Pr"] += np.matmul(self.data["nec"] * self.D,
-                                 np.matmul(self.B, u) + np.matmul(self.C, v))[0]
-            error = Pi - self.data["Pr"]
+                                        np.matmul(self.B, u) + np.matmul(self.C, v))[0]
+            error = Pi_cap - self.data["Pr"]
             iter += 1
-            # TODO: move to config
-            if abs(error0 - error) < 0.005:  # tolerante of control error
+            if abs(error0 - error) < self.config["er_tol"]:  # tolerante of control error
                 break
 
         # number of actions
@@ -1238,7 +1241,7 @@ class ev_ssm():
                              self.config["n_pref"], axis=1)
         self.vsp = np.repeat(vs[0:self.Ns].reshape(self.Ns, 1),
                              self.config["n_pref"], axis=1)
-        return u, v, us, vs, usp, vsp
+        return u, v, us, vs, usp, vsp, Pi_cap, error
 
     def g_agc(self, Pi):
         """
