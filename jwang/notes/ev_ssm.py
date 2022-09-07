@@ -7,17 +7,17 @@ import numpy as np
 import scipy.stats as stats
 import matplotlib.pyplot as plt
 from collections import OrderedDict
-import swifter
-from swifter import set_defaults
-set_defaults(
-    npartitions=None,
-    dask_threshold=1,
-    scheduler="processes",
-    progress_bar=False,
-    progress_bar_desc=None,
-    allow_dask_on_strings=False,
-    force_parallel=True,
-)
+# import swifter
+# from swifter import set_defaults
+# set_defaults(
+#     npartitions=None,
+#     dask_threshold=1,
+#     scheduler="processes",
+#     progress_bar=False,
+#     progress_bar_desc=None,
+#     allow_dask_on_strings=False,
+#     force_parallel=True,
+# )
 
 import logging
 logger = logging.getLogger(__name__)
