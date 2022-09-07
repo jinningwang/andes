@@ -792,11 +792,7 @@ class ev_ssm():
                 self.data["ts"] = self.g_ts(t)
                 self.g_u()  # update online status
                 # TODO: add warning when Pi is 0
-                if Pi >= 0:
-                    Pi_cap = min(Pi, self.prumax)
-                elif Pi < 0:
-                    Pi_cap = max(Pi, -1*self.prdmax)
-                Pi_input = Pi_cap - (1 - self.config["ecc_off"]) * Per  # * self.data["Per"]
+                Pi_input = Pi - (1 - self.config["ecc_off"]) * Per  # * self.data["Per"]
                 self.g_c(Pi=Pi_input, is_test=is_test)  # update control signal
                 # --- update soc interval and online status ---
                 # charging/discharging power, kW
@@ -820,7 +816,7 @@ class ev_ssm():
                                            (1 - self.ev['mod']) * (1 - self.ev['lc'])) * 1e-3
                 self.tsd = pd.concat([self.tsd, pd.DataFrame(data=self.data, index=[0])],
                                      ignore_index=True)
-                self.tsd.iloc[-1, 1] = Pi_cap  # col "Pr"
+                self.tsd.iloc[-1, 1] = Pi  # col "Pr"
                 self.n_step += 1
 
     def g_A(self, is_update=False):
@@ -1218,10 +1214,11 @@ class ev_ssm():
             # --- record output ---
             # TODO: modification of random traveling behavior
             self.x0 = self.x0 + np.matmul(self.B, u) + np.matmul(self.C, v)
+            self.ep()
             # dx0 = np.matmul(self.B, u) + np.matmul(self.C, v)
             # self.data["Pr"] = np.matmul(self.D, dx0)[0]
             self.data["Pr"] += np.matmul(self.data["nec"] * self.D,
-                                        np.matmul(self.B, u) + np.matmul(self.C, v))[0]
+                                         np.matmul(self.B, u) + np.matmul(self.C, v))[0]
             error = Pi_cap - self.data["Pr"]
             iter += 1
             if abs(error0 - error) < self.config["er_tol"]:  # tolerante of control error
