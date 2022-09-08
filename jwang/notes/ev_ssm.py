@@ -380,7 +380,7 @@ class ev_ssm():
         for i in range(self.ev_ufparam['Ns']):
             intv_single = [np.around(i*unit, decimal), np.around((i+1)*unit, decimal)]
             self.soc_intv[i] = intv_single
-        self.Ns = self.ev_ufparam['Ns']
+        self.config["Ns"] = self.ev_ufparam['Ns']
         ev_pdf = pd.DataFrame(data=self.ev_pdf_data, index=self.ev_pdf_name).transpose()
         self.ev_nfparam = ev_pdf.to_dict()
 
@@ -472,7 +472,9 @@ class ev_ssm():
             lambda x: 0 if (x[0] >= x[2]) & (x[1] == 1) else x[1], axis=1)
         self.ev[['c', 'c2', 'c0']] = self.ev[['c', 'c2', 'c0']].astype(int)
 
-        self.find_sx()
+        # --- find single EV sx --- can remove
+        # self.ev["sx"] = np.ceil(self.ev["soc"] / (1 / self.config["Ns"])) - 1
+        # self.ev["sx"] = self.ev["sx"].astype(int)
         self.g_x()
         self.r_state()
 
@@ -555,7 +557,8 @@ class ev_ssm():
             Table of SSM status of *online* EVs, by percentage
         """
         # --- find single EV sx ---
-        self.ev['sx'] = self.ev['soc'].apply(lambda x: find_x(x, self.soc_intv))
+        self.ev["sx"] = np.ceil(self.ev["soc"] / (1 / self.config["Ns"])) - 1
+        self.ev["sx"] = self.ev["sx"].astype(int)
 
         # --- update c2 ---
         self.ev['c2'] = self.ev['c'].replace({1: 0, 0: 1, -1: 2})
@@ -565,7 +568,7 @@ class ev_ssm():
         states = self.ev[self.ev['lc'] == 0][['c2', 'sx', 'u']].apply(
             lambda x: (x[0], x[1]) if x[2] else (-1, -1), axis=1)
         res = dict(states.value_counts())
-        self.xtab = pd.DataFrame(columns=range(self.Ns), index=[0, 1, 2], data=0)
+        self.xtab = pd.DataFrame(columns=range(self.config["Ns"]), index=[0, 1, 2], data=0)
         for key in res.keys():
             if key[1] > -1:
                 self.xtab.loc[key[0], key[1]] = res[key]
@@ -720,7 +723,9 @@ class ev_ssm():
         self.ev[['c', 'c2', 'c0']] = self.ev[['c', 'c2', 'c0']].astype(int)
 
         # --- update x ---
-        self.find_sx()
+        # --- find single EV sx --- can remove
+        # self.ev["sx"] = np.ceil(self.ev["soc"] / (1 / self.config["Ns"])) - 1
+        # self.ev["sx"] = self.ev["sx"].astype(int)
         self.g_x()
         self.g_xl()
 
@@ -759,7 +764,9 @@ class ev_ssm():
                 lambda x: 1 if (x[2] >= x[3]) & (x[1] == 1) else x[1], axis=1)
 
             # --- update x ---
-            self.find_sx()
+            # --- find single EV sx --- can remove
+            # self.ev["sx"] = np.ceil(self.ev["soc"] / (1 / self.config["Ns"])) - 1
+            # self.ev["sx"] = self.ev["sx"].astype(int)
             self.g_x()
             self.g_xl()
 
@@ -831,7 +838,9 @@ class ev_ssm():
                 self.ev.loc[maskl, 'soc'] = self.socl
                 
                 # --- update x ---
-                self.find_sx()
+                # --- find single EV sx --- can remove
+                # self.ev["sx"] = np.ceil(self.ev["soc"] / (1 / self.config["Ns"])) - 1
+                # self.ev["sx"] = self.ev["sx"].astype(int)
                 self.g_x()
 
                 if is_updateA:
@@ -867,11 +876,11 @@ class ev_ssm():
         for x, y in zip(ctrls, states):
             data0 = []
             for c, s in zip(x, y):
-                rx = c * self.Ns + s
+                rx = c * self.config["Ns"] + s
                 data0.append(rx)
             data.append(data0)
 
-        A0 = np.zeros((3*self.Ns, 3*self.Ns))
+        A0 = np.zeros((3*self.config["Ns"], 3*self.config["Ns"]))
         for d in data:
             for i in range(len(d)-1):
                 A0[d[i+1], d[i]] += 1
@@ -1010,7 +1019,9 @@ class ev_ssm():
         self.g_u()
         self.ev['u0'] = self.ev.u
 
-        self.find_sx()
+        # --- find single EV sx --- can remove
+        # self.ev["sx"] = np.ceil(self.ev["soc"] / (1 / self.config["Ns"])) - 1
+        # self.ev["sx"] = self.ev["sx"].astype(int)
         self.g_x()
         self.r_state()
         self.data["ne"] = self.ev.u.sum()
@@ -1128,15 +1139,15 @@ class ev_ssm():
         The output of mode {m} ``P{m}=ne*D{m}*x0``, where `m` in [a, b, c, d]
         """
         # --- B ---
-        B1 = -1 * np.eye(self.Ns)
-        B2 = np.eye(self.Ns)
-        B3 = np.zeros((self.Ns, self.Ns))
+        B1 = -1 * np.eye(self.config["Ns"])
+        B2 = np.eye(self.config["Ns"])
+        B3 = np.zeros((self.config["Ns"], self.config["Ns"]))
         self.B = np.vstack((B1, B2, B3))
 
         # --- C ---
-        C1 = np.zeros((self.Ns, self.Ns))
-        C2 = -1 * np.eye(self.Ns)
-        C3 = np.eye(self.Ns)
+        C1 = np.zeros((self.config["Ns"], self.config["Ns"]))
+        C2 = -1 * np.eye(self.config["Ns"])
+        C3 = np.eye(self.config["Ns"])
         self.C = np.vstack((C1, C2, C3))
 
         # --- D ---
@@ -1148,33 +1159,33 @@ class ev_ssm():
             Pave += (kde.integrate_box(Pl, Pl+step)) * (Pl + 0.005 * step)
         Pave = Pave / 1000  # kW to MW
         self.Pave = Pave
-        D1 = -1 * np.ones((1, self.Ns))
-        D2 = np.zeros((1, self.Ns))
-        D3 = np.ones((1, self.Ns))
+        D1 = -1 * np.ones((1, self.config["Ns"]))
+        D2 = np.zeros((1, self.config["Ns"]))
+        D3 = np.ones((1, self.config["Ns"]))
         self.D = Pave * np.hstack((D1, D2, D3))
 
         # --- D a,b,c,d ---
-        D1 = np.zeros((1, self.Ns))
-        D2 = np.zeros((1, self.Ns))
-        D3 = np.ones((1, self.Ns))
+        D1 = np.zeros((1, self.config["Ns"]))
+        D2 = np.zeros((1, self.config["Ns"]))
+        D3 = np.ones((1, self.config["Ns"]))
         self.Da = Pave * np.hstack((D1, D2, D3))
 
-        D1 = np.ones((1, self.Ns))
-        D2 = np.ones((1, self.Ns))
-        D3 = np.ones((1, self.Ns))
+        D1 = np.ones((1, self.config["Ns"]))
+        D2 = np.ones((1, self.config["Ns"]))
+        D3 = np.ones((1, self.config["Ns"]))
         self.Db = Pave * np.hstack((D1, D2, D3))
-        self.Db[0, self.Ns] = 0  # low charged EV don't DC
+        self.Db[0, self.config["Ns"]] = 0  # low charged EV don't DC
 
-        D1 = -1 * np.ones((1, self.Ns))
-        D2 = np.zeros((1, self.Ns))
-        D3 = np.zeros((1, self.Ns))
+        D1 = -1 * np.ones((1, self.config["Ns"]))
+        D2 = np.zeros((1, self.config["Ns"]))
+        D3 = np.zeros((1, self.config["Ns"]))
         self.Dc = Pave * np.hstack((D1, D2, D3))
 
-        D1 = -1 * np.ones((1, self.Ns))
-        D2 = -1 * np.ones((1, self.Ns))
-        D3 = -1 * np.ones((1, self.Ns))
+        D1 = -1 * np.ones((1, self.config["Ns"]))
+        D2 = -1 * np.ones((1, self.config["Ns"]))
+        D3 = -1 * np.ones((1, self.config["Ns"]))
         self.Dd = Pave * np.hstack((D1, D2, D3))
-        self.Dd[0, 2*self.Ns-1] = 0  # high charged EV don't C
+        self.Dd[0, 2*self.config["Ns"]-1] = 0  # high charged EV don't C
 
         return True
 
@@ -1207,12 +1218,12 @@ class ev_ssm():
         elif Pi < 0:
             Pi_cap = max(Pi, -1*self.prdmax)
         # initialize output
-        u = np.zeros(self.Ns)
-        v = np.zeros(self.Ns)
-        us = np.zeros(self.Ns+1)
-        vs = np.zeros(self.Ns+1)
-        usp = np.repeat(us.reshape(self.Ns+1, 1), self.config["n_pref"], axis=1)
-        vsp = np.repeat(vs.reshape(self.Ns+1, 1), self.config["n_pref"], axis=1)
+        u = np.zeros(self.config["Ns"])
+        v = np.zeros(self.config["Ns"])
+        us = np.zeros(self.config["Ns"]+1)
+        vs = np.zeros(self.config["Ns"]+1)
+        usp = np.repeat(us.reshape(self.config["Ns"]+1, 1), self.config["n_pref"], axis=1)
+        vsp = np.repeat(vs.reshape(self.config["Ns"]+1, 1), self.config["n_pref"], axis=1)
         # corrected control
         error = Pi_cap - self.data["Pr"]
         iter = 0
@@ -1220,9 +1231,9 @@ class ev_ssm():
             error0 = error
             u, v, us, vs = self.g_agc(Pi - self.data["Pr"])
             # pereference signal
-            usp = np.repeat(us.reshape(self.Ns+1, 1), self.config["n_pref"], axis=1)
-            vsp = np.repeat(vs.reshape(self.Ns+1, 1), self.config["n_pref"], axis=1)
-            for i_sx in range(self.Ns):
+            usp = np.repeat(us.reshape(self.config["Ns"]+1, 1), self.config["n_pref"], axis=1)
+            vsp = np.repeat(vs.reshape(self.config["Ns"]+1, 1), self.config["n_pref"], axis=1)
+            for i_sx in range(self.config["Ns"]):
                 pu = us[i_sx]
                 pv = vs[i_sx]
                 if (us[-1] == 1) & (vs[-1] == 1):
@@ -1263,9 +1274,9 @@ class ev_ssm():
 
         self.uv = [u, v, us, vs, usp, vsp]
         # TODO: ps array
-        self.usp = np.repeat(us[0:self.Ns].reshape(self.Ns, 1),
+        self.usp = np.repeat(us[0:self.config["Ns"]].reshape(self.config["Ns"], 1),
                              self.config["n_pref"], axis=1)
-        self.vsp = np.repeat(vs[0:self.Ns].reshape(self.Ns, 1),
+        self.vsp = np.repeat(vs[0:self.config["Ns"]].reshape(self.config["Ns"], 1),
                              self.config["n_pref"], axis=1)
         return u, v, us, vs, usp, vsp, Pi_cap, error
 
@@ -1295,26 +1306,26 @@ class ev_ssm():
         """
         x = self.x0.copy()
 
-        u = np.zeros(self.Ns)
-        v = np.zeros(self.Ns)
-        us = np.zeros(self.Ns+1)
-        vs = np.zeros(self.Ns+1)
+        u = np.zeros(self.config["Ns"])
+        v = np.zeros(self.config["Ns"])
+        us = np.zeros(self.config["Ns"]+1)
+        vs = np.zeros(self.config["Ns"]+1)
 
         deadband = 1e-6
 
         if Pi >= deadband:  # deadband0:  # RegUp
             # --- step I ---
             ru = min(Pi, self.Pa) / (self.Pave * self.data["nec"])  # total RegUp power
-            u = np.zeros(self.Ns)   # C->I
-            v = np.zeros(self.Ns)   # I->D
-            for j in range(self.Ns):
-                a = ru - np.sum(x[j+1: self.Ns]) - np.sum(x[j+1+self.Ns: 2*self.Ns])
+            u = np.zeros(self.config["Ns"])   # C->I
+            v = np.zeros(self.config["Ns"])   # I->D
+            for j in range(self.config["Ns"]):
+                a = ru - np.sum(x[j+1: self.config["Ns"]]) - np.sum(x[j+1+self.config["Ns"]: 2*self.config["Ns"]])
                 u[j] = min(max(a, 0), x[j])
-                v[j] = min(max(a-x[j], 0), x[j+self.Ns])
+                v[j] = min(max(a-x[j], 0), x[j+self.config["Ns"]])
             # --- step II ---
-            for j in range(self.Ns):
+            for j in range(self.config["Ns"]):
                 us[j] = min(safe_div(u[j], x[j]), 1)
-                vs[j] = min(safe_div(v[j], x[j+self.Ns]+u[j]), 1)   # TODO: switch two times?
+                vs[j] = min(safe_div(v[j], x[j+self.config["Ns"]]+u[j]), 1)   # TODO: switch two times?
             # --- step III ---
             us[-1] = 1
             vs[-1] = 1
@@ -1322,20 +1333,20 @@ class ev_ssm():
         elif Pi <= -deadband:  # RegDn
             # --- step I ---
             rv = max(Pi, self.Pc) / (self.Pave * self.data["nec"])
-            v = np.zeros(self.Ns)
-            for j in range(self.Ns):
-                a = rv + np.sum(x[2*self.Ns: 2*self.Ns+j])
-                v[j] = max(min(a, 0), -1 * x[j+2*self.Ns])
+            v = np.zeros(self.config["Ns"])
+            for j in range(self.config["Ns"]):
+                a = rv + np.sum(x[2*self.config["Ns"]: 2*self.config["Ns"]+j])
+                v[j] = max(min(a, 0), -1 * x[j+2*self.config["Ns"]])
 
             ru = min(Pi-self.Pc, 0) / (self.Pave * self.data["nec"])
-            u = np.zeros(self.Ns)
-            for j in range(self.Ns):
+            u = np.zeros(self.config["Ns"])
+            for j in range(self.config["Ns"]):
                 a = ru - np.sum(v[0:j]) - np.sum(u[0:j-1])
-                u[j] = max(min(a, 0), -1 * x[j+self.Ns])
+                u[j] = max(min(a, 0), -1 * x[j+self.config["Ns"]])
             # --- step II ---
-            for j in range(self.Ns):
-                vs[j] = min(safe_div(-1*v[j], x[j+2*self.Ns]), 1)
-                us[j] = min(safe_div(-1*u[j], x[j+self.Ns]-v[j]), 1)
+            for j in range(self.config["Ns"]):
+                vs[j] = min(safe_div(-1*v[j], x[j+2*self.config["Ns"]]), 1)
+                us[j] = min(safe_div(-1*u[j], x[j+self.config["Ns"]]-v[j]), 1)
             # --- step III ---
             us[-1] = -1
             vs[-1] = -1
