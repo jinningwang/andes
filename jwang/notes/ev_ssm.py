@@ -24,80 +24,6 @@ logger = logging.getLogger(__name__)
 
 
 # --- Functions ---
-def r_agc_sev(evs, us, vs, usp, vsp):
-    """
-    Single EV reacts to AGC control signal `us` `vs`.
-
-    Parameters
-    ----------
-    evs: list
-        Single EV information, ['u', 'c', 'sx', 'pref']
-    u: numpy.ndarray
-        SSM vector `u`, (Ns,); mode (a), (d): CS - IS
-    v: numpy.ndarray
-        SSM vector `v`, (Ns,); mode (b), (c): IS - DS
-    us: numpy.ndarray
-        SSM vector `us`, (Ns+1,); probability mode (a), (d): CS - IS
-    vs: numpy.ndarray
-        SSM vector `vs`, (Ns+1,); probability mode (b), (c): IS - DS
-    usp: numpy.ndarray
-        (Ns+1, n_pref), probability mode (a), (d) with pereference: CS - IS
-    vsp: numpy.ndarray
-        (Ns+1, n_pref), probability mode (b), (c) with pereference: IS - DS
-
-    Returns
-    -------
-    ctrl: int
-        Single EV control signal.
-    """
-    ctrl = evs[1]
-    if evs[0] == 0:  # offline
-        ctrl = 0
-    elif us[-1]*vs[-1] == 0:  # no AGC or low charging
-        ctrl = evs[1]
-    elif evs[0] == 1:  # online
-        if (evs[1] == 0) & (vs[-1] == 1):  # response with vs1 [I to D]
-            a = [-1, 0]
-            p = [vsp[evs[2], evs[3]], 1-vsp[evs[2], evs[3]]]
-        elif (evs[1] == 1) & (us[-1] == 1):  # response with us1, [C to I]
-            a = [0, 1]
-            p = [usp[evs[2], evs[3]], 1-usp[evs[2], evs[3]]]
-        elif (evs[1] == 0) & (us[-1] == -1):  # response with us-1 [I to C]
-            a = [1, 0]
-            p = [usp[evs[2], evs[3]], 1-usp[evs[2], evs[3]]]
-        elif (evs[1] == -1) & (vs[-1] == -1):  # response with vs-1 [D to I]
-            a = [0, -1]
-            p = [vsp[evs[2], evs[3]], 1-vsp[evs[2], evs[3]]]
-        else:  # remain unchange for other conditions
-            a = [evs[1]]
-            p = [1]
-        ctrl = np.random.choice(a=a, p=p, size=1, replace=True)[0]
-    return ctrl
-
-
-def find_x(x, soc_intv):
-    """
-    Find soc interval of a single EV.
-
-    Parameters
-    ----------
-    x: float
-        SOC of a single EV.
-    soc_intv: dict
-        dict of SOC intervals.
-
-    Returns
-    -------
-    out: int
-        SOC interval of a single EV.
-    """
-    out = -1
-    for idx in soc_intv.keys():
-        if x > soc_intv[idx][0] and x <= soc_intv[idx][1]:
-            out = idx
-    return out
-
-
 def update_xl(inl_input):
     """
     Update online staus records, x series.
@@ -203,12 +129,6 @@ class ev_ssm():
         tf2: finish charging time, [24H]
     """
 
-    def find_sx(self):
-        """
-        Find SOC interval of each EV, and update ev['sx'].
-        """
-        self.ev['sx'] = self.ev['soc'].apply(lambda x: find_x(x, self.soc_intv))
-
     def report(self, is_report=True):
         """
         Report EVA info.
@@ -227,8 +147,8 @@ class ev_ssm():
         masku = self.ev[(self.ev['u'] > 0) & (self.ev['c'] > 0)].index
         maskl = self.ev[(self.ev['u'] > 0) & (self.ev['c'] < 0)].index
         self.ev['Ps'] = 0
-        self.ev.loc[masku, 'Ps'] =  -1 * -1 * self.ev.loc[masku, 'Pc']
-        self.ev.loc[maskl, 'Ps'] =  -1 * self.ev.loc[maskl, 'Pd']
+        self.ev.loc[masku, 'Ps'] = -1 * -1 * self.ev.loc[masku, 'Pc']
+        self.ev.loc[maskl, 'Ps'] = -1 * self.ev.loc[maskl, 'Pd']
         self.data['Ptc'] = -1 * self.ev['Ps'].sum()/1e3
         self.data['Pcc'] = -1 * self.ev.loc[masku, 'Ps'].sum()/1e3
         self.data['Pdc'] = -1 * self.ev.loc[maskl, 'Ps'].sum()/1e3
@@ -449,8 +369,8 @@ class ev_ssm():
             lambda x: x[0] + (min(self.data['ts']-x[1], x[5]-x[1]))*x[2]*x[3]/x[4] if self.data['ts'] > x[1] else x[0], axis=1)
         masku = self.ev['soc'].values >= self.socu
         maskl = self.ev['soc'].values <= self.socl
-        self.ev.loc[masku,'soc'] = self.socu
-        self.ev.loc[maskl,'soc'] = self.socl
+        self.ev.loc[masku, 'soc'] = self.socu
+        self.ev.loc[maskl, 'soc'] = self.socl
         mask_bd1 = self.ev['soc'].values <= self.sl
         mask_bd2 = self.ev['soc'].values >= self.su
         mask_bd = mask_bd1 | mask_bd2
@@ -634,7 +554,7 @@ class ev_ssm():
 
         ax_agc.set_xlabel(xlabel)
         ax_agc.set_ylabel("Power (MW)")
-        ax_agc.set_title(f"AGC response")
+        ax_agc.set_title("AGC response")
         ax_agc.set_xlim(self.tsd[x].iloc[0], self.tsd[x].iloc[-1])
         ax_agc.grid()
         ax_agc.legend()
@@ -741,8 +661,8 @@ class ev_ssm():
             self.ev['soc'] = self.ev.soc + t_step * self.ev['dP'] / self.ev['Q']
             masku = self.ev['soc'].values >= self.socu
             maskl = self.ev['soc'].values <= self.socl
-            self.ev.loc[masku,'soc'] = self.socu
-            self.ev.loc[maskl,'soc'] = self.socl
+            self.ev.loc[masku, 'soc'] = self.socu
+            self.ev.loc[maskl, 'soc'] = self.socl
             self.ev['soc'] = self.ev.soc + t_step * self.ev['dP'] / self.ev['Q']
             # --- boundary ---
             self.ev['bd'] = self.ev[['soc', 'socd']].apply(
@@ -836,7 +756,7 @@ class ev_ssm():
                 maskl = self.ev[self.ev['soc'].astype(float) <= self.socl].index
                 self.ev.loc[masku, 'soc'] = self.socu
                 self.ev.loc[maskl, 'soc'] = self.socl
-                
+
                 # --- update x ---
                 # --- find single EV sx --- can remove
                 # self.ev["sx"] = np.ceil(self.ev["soc"] / (1 / self.config["Ns"])) - 1
@@ -849,7 +769,7 @@ class ev_ssm():
                 # Actual AGC response: AGC switched power if not modified. (MW)
                 self.data["Prc"] += np.sum(self.ev.agc * self.ev.Pc *
                                            (1 - self.ev['mod']) * (1 - self.ev['lc'])) * 1e-3
-                
+
                 self.tsd = pd.concat([self.tsd, pd.DataFrame(data=self.data, index=[0])],
                                      ignore_index=True)
                 self.tsd.iloc[-1, 1] = Pi  # col "Pr"
@@ -1063,8 +983,8 @@ class ev_ssm():
         masku = self.ev[(self.ev['u'] == 1) & (self.ev['c'].values > 0)].index
         maskl = self.ev[(self.ev['u'] == 1) & (self.ev['c'].values < 0)].index
         self.ev['Ps'] = 0
-        self.ev.loc[masku, 'Ps'] =  self.ev.loc[masku, 'Pc']
-        self.ev.loc[maskl, 'Ps'] =  -1 * self.ev.loc[maskl, 'Pd']
+        self.ev.loc[masku, 'Ps'] = self.ev.loc[masku, 'Pc']
+        self.ev.loc[maskl, 'Ps'] = -1 * self.ev.loc[maskl, 'Pd']
 
         Pt = - self.ev['Ps'].to_numpy().sum()
         Pc = - self.ev['Ps'][self.ev['Ps'].values > 0].sum()
@@ -1249,7 +1169,37 @@ class ev_ssm():
                         usp[i_sx, i] = max(min((pu-su)/self.rho[i], 1), 0)
                         vsp[i_sx, i] = max(min((pv-sv)/self.rho[i], 1), 0)
 
-            self.ev.c = self.ev[['u', 'c', 'sx', 'pref']].apply(lambda x: r_agc_sev(x, us, vs, usp, vsp), axis=1)
+            # EV switch control states according to aggregator signal
+            # --- old version ---
+            # self.ev.c = self.ev[['u', 'c', 'sx', 'pref']].apply(lambda x: r_agc_sev(x, us, vs, usp, vsp), axis=1)
+            # --- new version ---
+            # self.ev["c"] = self.ev["c"] * self.ev["u"]  # offline
+            self.ev["pv"] = vsp[self.ev["sx"], self.ev["pref"]]  # prob for vs
+            self.ev["pu"] = usp[self.ev["sx"], self.ev["pref"]]  # prob for us
+
+            cond_ol = self.ev["u"] == 1  # online EV
+            cond_nlc = self.ev["lc"] == 0  # non-lc EV
+
+            self.ev["p"] = 1
+            mask_p = self.ev[cond_ol & cond_nlc].index
+            self.ev.loc[mask_p, "p"] = np.random.uniform(low=0, high=1, size=len(mask_p))
+
+            cond_pv = self.ev["p"] <= self.ev["pv"]  # prob of EV to vs
+            cond_pu = self.ev["p"] <= self.ev["pu"]  # prob of EV to us
+            cond_d = self.ev["c"] == -1  # EV in DS
+            cond_i = self.ev["c"] == 0  # EV in IS
+            cond_c = self.ev["c"] == 1  # EV in CS
+            if us[-1] == 1:  # positive signal, I to D, C to I
+                maskvs = self.ev[cond_ol & cond_nlc & cond_pv & cond_i].index
+                maskus = self.ev[cond_ol & cond_nlc & cond_pu & cond_c].index
+                self.ev.loc[maskvs, "c"] = -1
+                self.ev.loc[maskus, "c"] = 0
+            elif us[-1] == -1:  # negative signal, I to C, D to I
+                maskvs = self.ev[cond_ol & cond_nlc & cond_pv & cond_d].index
+                maskus = self.ev[cond_ol & cond_nlc & cond_pu & cond_i].index
+                self.ev.loc[maskvs, "c"] = 0
+                self.ev.loc[maskus, "c"] = 1
+
             self.g_x()
             # --- record output ---
             # TODO: modification of random traveling behavior
