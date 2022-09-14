@@ -851,11 +851,21 @@ class ev_ssm():
         else:
             pass
             c_init = self.ev['c'].copy()
-            if abs(Pi) > 1e-4:  # deadband
+            if abs(Pi) > self.config["Pdbd"]:  # deadband
                 self.r_agc(Pi=Pi)
             else:
                 self.r_agc(Pi=0)
+
+            # update agc status
             self.ev['agc'] = c_init - self.ev['c']
+            # update na, number of actions
+            mask = self.ev[(self.ev["u"] == 1) & (self.ev["lc"] == 0)].index
+            self.ev.loc[mask, 'na'] += self.ev["agc"].iloc[mask]
+            if not self.config["ict_off"]:  # update lc when ICT is on
+                lc0 = self.ev['lc'].values.copy().astype(int)
+                self.ev['lc'] = self.ev['na'].values >= self.ev['nam']
+                self.ev['lc'] = self.ev['lc'].values | lc0  # once lc, never AGC
+                self.ev['lc'] = self.ev['lc'].astype(int)
             # --- revise control ---
             # `CS` for low charged EVs, and set 'lc' to 1
             # self.ev['lc'] = self.ev['lc'].astype(bool)
@@ -1214,14 +1224,6 @@ class ev_ssm():
             iter += 1
             if abs(error0 - error) < self.config["er_tol"]:  # tolerante of control error
                 break
-
-        # number of actions
-        self.ev['na'] += (self.ev['soc'].values < self.ev['socd'].values) - self.ev['c'].values
-        if not self.config["ict_off"]:
-            lc0 = self.ev['lc'].values.copy().astype(int)
-            self.ev['lc'] = self.ev['na'].values >= self.ev['nam']
-            self.ev['lc'] = self.ev['lc'].values | lc0  # once lc, never response again
-        self.ev['lc'] = self.ev['lc'].astype(int)
 
         self.uv = [u, v, us, vs, usp, vsp]
         # TODO: ps array
