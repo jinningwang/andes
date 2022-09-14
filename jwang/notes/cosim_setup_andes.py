@@ -2,7 +2,7 @@
 sse = ev_ssm(ts=caseH, N=50000, step=1, tp=40,
              lr=0.1, lp=60, seed=2022, name="EVA",
              n_pref=1, is_report=True,
-             tt_mean=0.5, tt_var=0.02, tt_lb=0, tt_ub=1,
+             tt_mean=0.3, tt_var=0.01, tt_lb=0, tt_ub=0.6,
              ict_off=ict_off, ecc_off=ecc_off)
 sse.load_A("Aest.csv")
 # historical data
