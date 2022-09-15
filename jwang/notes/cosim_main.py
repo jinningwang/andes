@@ -176,8 +176,10 @@ for end_time in range(t_total):  # t_total
         sse.run(tf=caseH+end_time/3600, Pi=sse_agc[0],
                 is_updateA=False, is_rstate=True,
                 is_test=False, disable=True)
-        ev_soc_data[end_time] = sse.ev.soc.iloc[ridx]
-        ev_agc_data[end_time] = sse.ev.agc.iloc[ridx]
+        ev_soc_data[end_time] = sse.ev["soc"].iloc[ridx]
+        ev_agc_data[end_time] = sse.ev["agc"].iloc[ridx]
+        ev_na_data[end_time] = sse.ev["na"].iloc[ridx]
+
         sse.report(is_report=False)
         ssa.EV2.set(src='pref0', idx=ac_res.dg_idx[ac_res.stg_idx == ev_idx].values[0],
                     attr='v', value=sse.data["Ptc"] / ssa.config.mva)

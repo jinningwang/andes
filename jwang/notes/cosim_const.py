@@ -64,6 +64,8 @@ Ki = 0.1
 # SFR boundary and total AGC input
 sfr_res_data = -1 * np.ones((int(np.ceil(t_total / intv_agc)), 5))
 
+
+
 # initial load value
 ssa_p0 = ssa.PQ.p0.v.copy()
 ssa_q0 = ssa.PQ.q0.v.copy()
@@ -87,8 +89,10 @@ agc_dg_idx = agc_table.dg_idx[cond_agc_dg].tolist()
 ridx = sse.ev.sample(frac=1, random_state=sse.config["seed"]).groupby('sx', sort=False).head(100).index
 ev_soc_data = -1 * np.ones((t_total, len(ridx)))
 ev_agc_data = -1 * np.ones((t_total, len(ridx)))
-ev_soc_data[0] = sse.ev.soc.iloc[ridx]
-ev_agc_data[0] = sse.ev.agc.iloc[ridx]
+ev_na_data = -1 * np.ones((t_total, len(ridx)))
+ev_soc_data[0] = sse.ev["soc"].iloc[ridx]
+ev_agc_data[0] = sse.ev["agc"].iloc[ridx]
+ev_na_data[0] = sse.ev["na"].iloc[ridx]
 
 # dispatch results
 rted_res = {}
