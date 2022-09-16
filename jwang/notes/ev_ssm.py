@@ -403,12 +403,13 @@ class ev_ssm():
         self.ev['na'] = self.ev['na'].astype(int)
 
         # initialization of max number of actions;
-        self.ev['nam'] = ((self.ev['tf'].mean() - self.ev['ts'].mean() + self.ev['tf']) * self.ev['Pc'].mean() * self.ev['nc'].mean()
-                           - self.ev['socd'] * self.ev['Q']) / (self.ev['Pc'].mean() * self.ev['nc'].mean() * self.config['t_agc'] / 3600)
+        pcn = self.ev['Pc'].mean() * self.ev['nc'].mean()
+        self.ev['nam'] = ((self.ev['tf'].mean() - self.ev['ts'].mean() + self.ev['tt']) * pcn
+                           - self.ev['socd'].mean() * self.ev['Q']) / (pcn * self.config['t_agc'] / 3600)
         self.ev['nam'] = self.ev['nam'].astype(int)
 
         if not self.config['ict_off']:
-            na_rid = self.ev[self.ev['na'].values >= self.ev['nam'].values].index
+            na_rid = self.ev[self.ev['na'] >= self.ev['nam']].index
             self.ev.loc[na_rid, 'na'] = self.ev.loc[na_rid, 'nam']
             self.ev.loc[na_rid, 'lc'] = 1
         self.g_u()
@@ -845,8 +846,7 @@ class ev_ssm():
             # RegDn are counted into na for full EVs
             agc = self.ev['agc'].copy()
             agc[agc > 0] = 0
-            # update na, number of actions
-            # cond: online, not full, not charging
+            # cond: online, full, not idle
             maskd = self.ev[(self.ev['u'] == 1) & (self.ev['soc'] >= self.ev['socd']) & (self.ev['c'] != 0)].index
             self.ev.loc[maskd, 'na'] += agc.iloc[maskd]
             if not self.config['ict_off']:  # update lc according to na when ICT is on
