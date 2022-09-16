@@ -1318,9 +1318,11 @@ class ev_ssm():
         scaler: int
             scaler for time, default unit is hour
         """
-        pna = (self.ev['na'] - self.ev['na0']) * (self.ev['tf'] - self.tsd['ts'].iloc[0]) / (self.data['ts'] - caseH)  # scale with running time
-        pna[pna > self.ev['nam']] = self.ev['nam'][pna > self.ev['nam']]  # upper cap
-        # TODO: using config value for T_AGC
+        # predicted na; scale with running time
+        pna = (self.ev['na'] - self.ev['na0']) * (self.ev['tf'] - self.tsd['ts'].iloc[0]) / (self.data['ts'] - self.tsd['ts'].iloc[0])
+        if not self.config['ict_off']:
+            pna[pna > self.ev['nam']] = self.ev['nam'][pna > self.ev['nam']]  # upper cap
+        pna[pna < 0] = 0  # lower cap TODO: is this necessary?
         self.ev['ict'] = pna / self.ev['nc'] * self.config['t_agc'] / 3600  # adjust by charging efficiency; unit: hour
         self.ev['ict'] *= scaler  # scale
         return True
@@ -1348,7 +1350,7 @@ class ev_ssm():
         # condition: not leave, not full
         rid1 = self.ev[(self.ev['tf'] > self.tsd['ts'].iloc[0] + 1) & (self.ev['soc'] < self.ev['socd'])].index # EV row index
         # predict SOC level when participating SFR; # delta SOC * remaining time
-        psoc = (self.ev['soc'] - self.ev['soc0']) * (self.ev['tf'] - self.tsd['ts'].iloc[0]) / (self.data['ts'] - caseH)  # scale with running time
+        psoc = (self.ev['soc'] - self.ev['soc0']) * (self.ev['tf'] - self.tsd['ts'].iloc[0]) / (self.data['ts'] - self.tsd['ts'].iloc[0])  # scale with running time
         # power0, - actual power
         # supposed obtained charging power if no AGC
         # self.ev['Pc'].iloc[ridx] * self.ev['nc'].iloc[ridx] * (self.ev['tf'].iloc[ridx]  - 18)
