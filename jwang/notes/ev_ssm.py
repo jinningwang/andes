@@ -746,8 +746,8 @@ class ev_ssm():
                     self.g_xl()
                 self.report(is_report=False)  # record power
                 # Actual AGC response: AGC switched power if not modified. (MW)
-                self.data['Prc'] += np.sum(self.ev.agc * self.ev.Pc *
-                                           (1 - self.ev['mod']) * (1 - self.ev['lc'])) * 1e-3
+                self.data['Prc'] = np.sum(self.ev['agc'] * self.ev['Pc'] *
+                                          (1 - self.ev['mod']) * (1 - self.ev['lc'])) * 1e-3
 
                 self.tsd = pd.concat([self.tsd, pd.DataFrame(data=self.data, index=[0])],
                                      ignore_index=True)
@@ -821,61 +821,52 @@ class ev_ssm():
             normal mode: ``CS`` for online EVs
             test mode: only revise control signal
         """
-        # record last ctrl signal
+        # record last reformatted ctrl signal
         self.ev['c0'] = self.ev['c2'].copy()
+        # `CS` for just arrived EVs
+        mask = self.ev[(self.ev['u0'] == 0) & (self.ev['u'] == 1)].index
+        self.ev.loc[mask, 'c'] = 1
 
         if is_test:
             pass
         else:
-            pass
-            c_init = self.ev['c'].copy()
             if abs(Pi) > self.config['Pdbd']:  # deadband
                 self.r_agc(Pi=Pi)
             else:
                 self.r_agc(Pi=0)
 
-            # update agc status
-            self.ev['agc'] = c_init - self.ev['c']
-            # RegUp are counted into na for not full EVs
-            agc = self.ev['agc'].copy()
-            agc[agc < 0] = 0
-            # update na, number of actions
-            # cond: online, not full, not charging
-            masku = self.ev[(self.ev['u'] == 1) & (self.ev['soc'] <= self.ev['socd']) & (self.ev['c'] != 1)].index
-            self.ev.loc[masku, 'na'] += agc.iloc[masku]
-            # RegDn are counted into na for full EVs
-            agc = self.ev['agc'].copy()
-            agc[agc > 0] = 0
-            # cond: online, full, not idle
-            maskd = self.ev[(self.ev['u'] == 1) & (self.ev['soc'] >= self.ev['socd']) & (self.ev['c'] != 0)].index
-            self.ev.loc[maskd, 'na'] += agc.iloc[maskd]
-            if not self.config['ict_off']:  # update lc according to na when ICT is on
+            # update agc
+            self.ev['agc'] = 0
+            # online, not full
+            mask_nf = self.ev[(self.ev['u'] == 1) & (self.ev['soc'] < self.ev['socd'])].index
+            self.ev.loc[mask_nf, 'agc'] = 1 - self.ev.loc[mask_nf, 'c']
+            # online, full
+            mask_f = self.ev[(self.ev['u'] == 1) & (self.ev['soc'] >= self.ev['socd'])].index
+            self.ev.loc[mask_f, 'agc'] = 0 - self.ev.loc[mask_f, 'c']
+            # update counter
+            self.ev['na'] += self.ev['agc']
+            # update lc according to na when ICT is on
+            if not self.config['ict_off']:
                 lc0 = self.ev['lc'].values.copy().astype(int)
                 self.ev['lc'] = self.ev['na'].values >= self.ev['nam']
                 self.ev['lc'] = self.ev['lc'].values | lc0  # once lc, never AGC
                 self.ev['lc'] = self.ev['lc'].astype(int)
             # --- revise control ---
             # `CS` for low charged EVs, and set 'lc' to 1
-            # self.ev['lc'] = self.ev['lc'].astype(bool)
-            mask = self.ev[self.ev['soc'] <= self.config['socl']].index
+            mask = self.ev[(self.ev['soc'] <= self.config['socl']) & (self.ev['u']) == 1].index
             self.ev.loc[mask, ['lc', 'c']] = 1
             self.ev['mod'] = 0
             self.ev.loc[mask, 'mod'] = 1
-            # `CS` for just arrived EVs
-            mask = self.ev[(self.ev['u0'] == 0) & (self.ev['u'] == 1)].index
-            self.ev.loc[mask, 'c'] = 1
             # `CS` for lc
             mask = self.ev[(self.ev['u'] == 1) & (self.ev['lc'] == 1)].index
             self.ev.loc[mask, 'c'] = 1
             # `IS` for demanded charging EVs
             mask = self.ev[(self.ev['soc'] >= self.ev['socd']) & (self.ev['c'] == 1)].index
             self.ev.loc[mask, 'c'] = 1
-            self.ev['mod'] = 0
-            self.ev.loc[mask, 'mod'] = 0
 
         # `IS` for offline EVs
         self.ev['c'] = self.ev['c'].astype(float) * self.ev['u'].astype(float)
-        # reformat to [0, 1, 2]
+        # reformatted control signal c2
         self.ev['c2'] = self.ev['c'].replace({1: 0, 0: 1, -1: 2})
         # format
         self.ev[['c', 'c2', 'c0']] = self.ev[['c', 'c2', 'c0']].astype(int)
