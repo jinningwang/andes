@@ -343,14 +343,25 @@ class ev_ssm():
         self.states_str = [str(s[1])+'S'+str(s[0]) for s in self.states]
 
         # --- update soc interval and online status ---
-        # TODO: modify this consider demanded level, do we need to consider the AGC participation?
+        # TODO: do we need to consider the AGC participation?
         # soc is initialized considering random behavior
-        self.ev['soc'] = self.ev[['soci', 'ts', 'Pc', 'nc', 'Q', 'tf']].apply(
-            lambda x: x[0] + (min(self.data['ts']-x[1], x[5]-x[1]))*x[2]*x[3]/x[4] if self.data['ts'] > x[1] else x[0], axis=1)
-        masku = self.ev['soc'] >= 1
-        maskl = self.ev['soc'] <= 0
-        self.ev.loc[masku, 'soc'] = 1
-        self.ev.loc[maskl, 'soc'] = 0
+        # required time to charge to socd
+        tr = (self.ev["socd"] - self.ev["soci"]) * self.ev["Q"] / self.ev["Pc"] / self.ev["nc"]
+        # stay time
+        tc = self.data['ts'] - self.ev["ts"]
+        tc[tc <0] = 0  # reset negative time to 0
+        # charge
+        self.ev['soc'] = self.ev["soci"]+tc*self.ev["Pc"]*self.ev["nc"]/self.ev["Q"]
+        # ratio of stay/required time
+        kt = tc/tr
+        kt[kt<1] = 1
+        mask = kt[kt>1].index
+        # higher than required charging time, log scale higher than socd
+        socp = self.ev["socd"]+np.log(kt)*(1-self.ev["socd"])
+        self.ev.loc[mask, 'soc'] = socp.iloc[mask]
+        # reset out of range EV soc
+        self.ev.loc[self.ev['soc'] >= 1, 'soc'] = 1
+        self.ev.loc[self.ev['soc'] <= 0, 'soc'] = 0
         mask_bd1 = self.ev['soc'].values <= self.config['socl']
         mask_bd2 = self.ev['soc'].values >= self.config['socu']
         mask_bd = mask_bd1 | mask_bd2
