@@ -343,6 +343,7 @@ class ev_ssm():
         self.states_str = [str(s[1])+'S'+str(s[0]) for s in self.states]
 
         # --- update soc interval and online status ---
+        # TODO: modify this consider demanded level, do we need to consider the AGC participation?
         # soc is initialized considering random behavior
         self.ev['soc'] = self.ev[['soci', 'ts', 'Pc', 'nc', 'Q', 'tf']].apply(
             lambda x: x[0] + (min(self.data['ts']-x[1], x[5]-x[1]))*x[2]*x[3]/x[4] if self.data['ts'] > x[1] else x[0], axis=1)
@@ -354,7 +355,7 @@ class ev_ssm():
         mask_bd2 = self.ev['soc'].values >= self.config['socu']
         mask_bd = mask_bd1 | mask_bd2
         self.ev['bd'] = 0
-        self.ev.loc[mask_bd, 'bd'] = 1
+        self.ev.loc[mask_bd, 'bd'] = 1  # indicator if in range
 
         self.ev['lc'] = 0  # low charge, 0 for regular, 1 for low charge
         # --- ev online status: u0 as u ---
@@ -705,7 +706,9 @@ class ev_ssm():
             logger.warning(f"{self.config['name']}: end time {tf}[H] is too close to start time {self.data['ts']}[H]," +
                            "simulation will not start.")
         else:
-            for t in tqdm(np.arange(self.data['ts'], tf + 0.1/3600, t_step), desc=f"{self.config['name']} MCS", disable=disable):
+            for t in tqdm(np.arange(self.data['ts'], tf + 0.1/3600, t_step),
+                          desc=f"{self.config['name']} MCS",
+                          disable=disable):
                 if abs(t - self.data['ts']) < self.config['t_tol']:
                     continue
                 # --- update SSM A ---
