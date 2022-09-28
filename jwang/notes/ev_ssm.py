@@ -12,7 +12,7 @@ from collections import OrderedDict
 # set_defaults(
 #     npartitions=None,
 #     dask_threshold=1,
-#     scheduler='processes',
+#     scheduler='proceselfs',
 #     progress_bar=False,
 #     progress_bar_desc=None,
 #     allow_dask_on_strings=False,
@@ -186,7 +186,7 @@ class ev_ssm():
                  lr=0.1, lp=100, seed=None, name="EVA",
                  n_pref=1, is_report=True,
                  tt_mean=0.5, tt_var=0.02, tt_lb=0, tt_ub=1,
-                 ict_off=False, ecc_off=False, t_dur=1):
+                 ict=False, ecc=False, t_dur=1):
         """
         Notes
         -----
@@ -221,16 +221,16 @@ class ev_ssm():
         n_pref: int
             Number of pereference level, n_pref >= 1.
         is_report: bool
-            Passed to ``report()``, True to report EVA info.
-        ict_off: bool
-            True to disable increasing charging time control.
-        ecc_off:
-            True to disable error correction.
+            Paselfd to ``report()``, True to report EVA info.
+        ict: bool
+            True to turn on increasing charging time control.
+        ecc:
+            True to turn on error correction.
         """
         # --- 1. init ---
         # TODO: improve documenation
         # --- sl/su: soc charging/dicharging boundary ---
-        self.config = OrderedDict(ict_off=ict_off, ecc_off=ecc_off,
+        self.config = OrderedDict(ict=ict, ecc=ecc,
                                   N=N, Ns=20, step=step, tp=tp, n_pref=n_pref,
                                   seed=seed, t_dur=t_dur, t_agc=t_agc,
                                   Np=int(tp/step), lr=lr, lp=lp,
@@ -272,9 +272,9 @@ class ev_ssm():
 
         # --- 1a. uniform distribution parameters range ---
         ev_ufparam = dict(Pl=5.0, Pu=7.0,
-                               nl=0.88, nu=0.95,
-                               Ql=20.0, Qu=30.0,
-                               socl=0, socu=1)
+                          nl=0.88, nu=0.95,
+                          Ql=20.0, Qu=30.0,
+                          socl=0, socu=1)
 
         cols = ['Pc', 'Pd', 'nc', 'nd', 'Q']
         cols_bound = {'Pc':   ['Pl', 'Pu'],
@@ -303,13 +303,13 @@ class ev_ssm():
         #  --- 1b. normal distribution parameters range ---
         ev_pdf_name = ['soci', 'socd', 'ts1', 'ts2', 'tf1', 'tf2', 'tt']
         ev_pdf_data = {'mean': [0.3,    0.8,    -6.5,  17.5,   8.9,  32.9, 0.5],
-                        'var': [0.05,   0.03,   3.4,   3.4,   3.4,  3.4, 0.02],
-                        'lb': [0.2,    0.7,    0.0,   5.5,    0.0,  20.9, 0],
-                        'ub': [0.4,    0.9,    5.5,   24.0,   20.9, 24.0, 1],
-                        'info':  ['initial SoC','demanded SoC',
-                                  'start charging time 1', 'start charging time 2',
-                                  'finish charging time 1', 'finish charging time 2',
-                                  'tolerance of increased charging time']}
+                       'var': [0.05,   0.03,   3.4,   3.4,   3.4,  3.4, 0.02],
+                       'lb': [0.2,    0.7,    0.0,   5.5,    0.0,  20.9, 0],
+                       'ub': [0.4,    0.9,    5.5,   24.0,   20.9, 24.0, 1],
+                       'info':  ['initial SoC', 'demanded SoC',
+                                 'start charging time 1', 'start charging time 2',
+                                 'finish charging time 1', 'finish charging time 2',
+                                 'tolerance of increased charging time']}
         ev_pdf = pd.DataFrame(data=ev_pdf_data, index=ev_pdf_name).transpose()
         for col in ev_pdf_name:
             self.ev[col] = stats.truncnorm(
@@ -349,13 +349,13 @@ class ev_ssm():
         tr = (self.ev["socd"] - self.ev["soci"]) * self.ev["Q"] / self.ev["Pc"] / self.ev["nc"]
         # stay time
         tc = self.data['ts'] - self.ev["ts"]
-        tc[tc <0] = 0  # reset negative time to 0
+        tc[tc < 0] = 0  # reset negative time to 0
         # charge
         self.ev['soc'] = self.ev["soci"]+tc*self.ev["Pc"]*self.ev["nc"]/self.ev["Q"]
         # ratio of stay/required time
         kt = tc/tr
-        kt[kt<1] = 1
-        mask = kt[kt>1].index
+        kt[kt < 1] = 1
+        mask = kt[kt > 1].index
         # higher than required charging time, log scale higher than socd
         socp = self.ev["socd"]+np.log(kt)*(1-self.ev["socd"])
         self.ev.loc[mask, 'soc'] = socp.iloc[mask]
@@ -407,20 +407,43 @@ class ev_ssm():
         self.ev['agc'] = 0  # `agc` is indicator of participation of AGC
         self.ev['mod'] = 0  # `mod` is indicator of modified of over or under charge
 
+        # load history data of ina
+        if self.config['ict']:
+            ina = np.genfromtxt('ev_ina_ict.csv', delimiter=',')
+        else:
+            ina = np.genfromtxt('ev_ina.csv', delimiter=',')
+
         # initialization of number of actions; truncated normal distribution;
         self.ev['na'] = stats.truncnorm((-2000 - 400 * (self.ev['tf'] - self.data['ts'])) / (self.ev['soci'] * 100),
                                         (8000 - 400 * (self.ev['tf'] - self.data['ts'])) / (self.ev['soci'] * 100),
                                         loc=400 * (self.ev['tf'] - self.data['ts']), scale=self.ev['soci'] * 100).rvs(self.ev.shape[0],
-                                                                                                                     random_state=self.config['seed'])
+                                                                                                                      random_state=self.config['seed'])
+        self.ev['na'] = self.ev['na'].astype(int)
+        sx0 = np.ceil(self.ev['soc'] / (1 / self.config['Ns'])) - 1
+        # size of each sx
+        sx0d = sx0.value_counts().sort_index()
+
+        for i in sx0d.index:
+            i = int(i)
+            a, b = ina[i, 2], ina[i, 3]
+            if a == b:
+                b = a + 0.01
+            pdf = stats.norm(loc=0, scale=ina[i, 1])
+            res = pdf.rvs(sx0d[float(i)], random_state=self.config['seed']).round(0)
+            mask = self.ev[sx0 == i].index
+            self.ev.loc[mask, 'na'] = ina[i, 0] * (self.ev['tf'].iloc[mask] - 18) + res
+        mask = self.ev[(self.ev['soc'] < self.ev['socd']) & (self.ev['na'] < 0)].index
+        na0 = 1000 * (self.ev['socd'] - self.ev['soc'])
+        self.ev.loc[mask, 'na'] = na0.iloc[mask]
         self.ev['na'] = self.ev['na'].astype(int)
 
         # initialization of max number of actions;
         pcn = self.ev['Pc'].mean() * self.ev['nc'].mean()
         self.ev['nam'] = ((self.ev['tf'].mean() - self.ev['ts'].mean() + self.ev['tt']) * pcn
-                           - self.ev['socd'].mean() * self.ev['Q']) / (pcn * self.config['t_agc'] / 3600)
+                          - self.ev['socd'].mean() * self.ev['Q']) / (pcn * self.config['t_agc'] / 3600)
         self.ev['nam'] = self.ev['nam'].astype(int)
 
-        if not self.config['ict_off']:
+        if self.config['ict']:
             na_rid = self.ev[self.ev['na'] >= self.ev['nam']].index
             self.ev.loc[na_rid, 'na'] = self.ev.loc[na_rid, 'nam']
             self.ev.loc[na_rid, 'lc'] = 1
@@ -436,7 +459,6 @@ class ev_ssm():
         set_in = set0 - set1 - set2
         self.ev = self.ev.iloc[list(set_in)].reset_index(drop=True)
         self.ev['soc0'] = self.ev['soc'].copy()
-        self.ev['na0'] = self.ev['na'].copy()
         return True
 
     def g_u(self):
@@ -733,7 +755,7 @@ class ev_ssm():
                 self.data['ts'] = self.g_ts(t)
                 self.g_u()  # update online status
                 # TODO: add warning when Pi is 0
-                Pi_input = Pi - (1 - self.config['ecc_off']) * Per  # * self.data['Per']
+                Pi_input = Pi - self.config['ecc'] * Per  # * self.data['Per']
                 self.g_c(Pi=Pi_input, is_test=is_test)  # update control signal
                 # --- update soc interval and online status ---
                 # charging/discharging power, kW
@@ -849,7 +871,7 @@ class ev_ssm():
             else:
                 self.r_agc(Pi=0)
 
-            # update agc
+            # --- update agc ---
             self.ev['agc'] = 0
             # online, not full
             mask_nf = self.ev[(self.ev['u'] == 1) & (self.ev['soc'] < self.ev['socd'])].index
@@ -860,7 +882,7 @@ class ev_ssm():
             # update counter
             self.ev['na'] += self.ev['agc']
             # update lc according to na when ICT is on
-            if not self.config['ict_off']:
+            if self.config['ict']:
                 lc0 = self.ev['lc'].values.copy().astype(int)
                 self.ev['lc'] = self.ev['na'].values >= self.ev['nam']
                 self.ev['lc'] = self.ev['lc'].values | lc0  # once lc, never AGC
@@ -927,10 +949,10 @@ class ev_ssm():
         A = self.A.copy()
         # TODO: reset with __init__ function
         self.__init__(self, ts=0, N=10000, step=1, tp=100, t_agc=4,
-                 lr=0.1, lp=100, seed=None, name='EVA',
-                 n_pref=1, is_report=True,
-                 tt_mean=0.5, tt_var=0.02, tt_lb=0, tt_ub=1,
-                 ict_off=False, ecc_off=False, t_dur=1)
+                      lr=0.1, lp=100, seed=None, name='EVA',
+                      n_pref=1, is_report=True,
+                      tt_mean=0.5, tt_var=0.02, tt_lb=0, tt_ub=1,
+                      ict=True, ecc=True, t_dur=1)
 
     def r_state(self):
         """
@@ -1317,34 +1339,37 @@ class ev_ssm():
     def ict2(self, scaler=1):
         """
         Calculate increased charging time, using ``na``
-    
+
         Parameters
         ----------
         scaler: int
             scaler for time, default unit is hour
         """
         # predicted na; scale with running time
-        pna = (self.ev['na'] - self.ev['na0']) * (self.ev['tf'] - self.tsd['ts'].iloc[0]) / (self.data['ts'] - self.tsd['ts'].iloc[0])
-        if not self.config['ict_off']:
+        pna = (self.ev['na'] - self.ev['na0']) * (self.ev['tf'] -
+                                                  self.tsd['ts'].iloc[0]) / (self.data['ts'] - self.tsd['ts'].iloc[0])
+        if self.config['ict']:
             pna[pna > self.ev['nam']] = self.ev['nam'][pna > self.ev['nam']]  # upper cap
         pna[pna < 0] = 0  # lower cap TODO: is this necessary?
-        self.ev['ict'] = pna / self.ev['nc'] * self.config['t_agc'] / 3600  # adjust by charging efficiency; unit: hour
+        self.ev['ict'] = pna / self.ev['nc'] * self.config['t_agc'] / \
+            3600  # adjust by charging efficiency; unit: hour
         self.ev['ict'] *= scaler  # scale
         return True
 
     def ict(self, scaler=1):
         """
         Calculate increased charging time
-        
+
         Parameters
         ----------
         scaler: int
             scaler for time, default unit is hour
         """
         self.ev['ict'] = 0
-        # for left cars, calculate ict with 
+        # for left cars, calculate ict with
         # condition: left, not full
-        rid0 = self.ev[(self.ev['tf'] <= self.tsd['ts'].iloc[0] + 1) & (self.ev['soc'] < self.ev['socd'])].index # no EV in this level for now
+        rid0 = self.ev[(self.ev['tf'] <= self.tsd['ts'].iloc[0] + 1) &
+                       (self.ev['soc'] < self.ev['socd'])].index  # no EV in this level for now
         self.ev['ict'].iloc[rid0] = self.ev['na'].iloc[rid0]
         # actual obtained soc, expected soc
         esoc = self.ev['Pc'] * self.ev['nc'] / self.ev['Q']
@@ -1353,13 +1378,15 @@ class ev_ssm():
 
         # for staying cars, calculate an estimated increased charging
         # condition: not leave, not full
-        rid1 = self.ev[(self.ev['tf'] > self.tsd['ts'].iloc[0] + 1) & (self.ev['soc'] < self.ev['socd'])].index # EV row index
+        rid1 = self.ev[(self.ev['tf'] > self.tsd['ts'].iloc[0] + 1) &
+                       (self.ev['soc'] < self.ev['socd'])].index  # EV row index
         # predict SOC level when participating SFR; # delta SOC * remaining time
-        psoc = (self.ev['soc'] - self.ev['soc0']) * (self.ev['tf'] - self.tsd['ts'].iloc[0]) / (self.data['ts'] - self.tsd['ts'].iloc[0])  # scale with running time
+        psoc = (self.ev['soc'] - self.ev['soc0']) * (self.ev['tf'] - self.tsd['ts'].iloc[0]) / \
+            (self.data['ts'] - self.tsd['ts'].iloc[0])  # scale with running time
         # power0, - actual power
         # supposed obtained charging power if no AGC
         # self.ev['Pc'].iloc[ridx] * self.ev['nc'].iloc[ridx] * (self.ev['tf'].iloc[ridx]  - 18)
-        # predicted power when participating the 
+        # predicted power when participating the
         # self.ev['psoc'].iloc[ridx] * self.ev['psoc'].iloc[ridx]
         ce = self.ev['Pc'] * self.ev['nc'] * (self.ev['tf'] - self.tsd['ts'].iloc[0])  # charging energy if no AGC
         me = self.ev['Q'] * (self.ev['socd'] - self.soc0)  # max energy considering SOC demand
