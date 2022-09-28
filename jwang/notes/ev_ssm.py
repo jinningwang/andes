@@ -236,7 +236,7 @@ class ev_ssm():
                                   Np=int(tp/step), lr=lr, lp=lp,
                                   t_tol=0.1/3600, Pdbd=1e-4, er_tol=0.005, iter_tol=10,
                                   socl=0.005, socu=0.995, name=name)
-        self.data = OrderedDict(ts=ts, Pr=0, Prc=0, Per=0)
+        self.data = OrderedDict(ts=ts, Pi=0, Pr=0, Prc=0, Per=0)
         # Pdbd: deadband of Power
         self.build()
         self.report(is_report=is_report)
@@ -437,8 +437,10 @@ class ev_ssm():
         self.ev['nam'] = self.ev['nam'].astype(int)
 
         if self.config['ict']:
-            na_rid = self.ev[self.ev['na'] >= self.ev['nam']].index
-            self.ev.loc[na_rid, 'na'] = self.ev.loc[na_rid, 'nam']
+            cond1 = (self.ev['na'] >= self.ev['nam']) & (self.ev['soc'] < self.ev['socd'])
+            cond2 = self.ev['soc'] <= self.config['socl']
+            na_rid = self.ev[cond1 | cond2].index
+            self.ev.loc[na_rid, 'na'] = self.ev['nam'].iloc[na_rid]
             self.ev.loc[na_rid, 'lc'] = 1
         self.g_u()
         # self.data['nec'] = self.ev['u'].sum() - self.ev["lc"].sum()  # numebr of online EVs with lc == 0
@@ -452,6 +454,7 @@ class ev_ssm():
         set_in = set0 - set1 - set2
         self.ev = self.ev.iloc[list(set_in)].reset_index(drop=True)
         self.ev['soc0'] = self.ev['soc'].copy()
+        self.ev['na0'] = self.ev['na'].astype(int)
         return True
 
     def g_u(self):
@@ -554,7 +557,7 @@ class ev_ssm():
         elif tu == 'h':
             x = 'ts'
             xlabel = 'Time [H]'
-        self.tsd.plot(x=x, y=['Pr', 'Prc'],
+        self.tsd.plot(x=x, y=['Pi', 'Prc'],
                       label=['Control', 'Response'],
                       ax=ax_agc)
 
@@ -727,7 +730,6 @@ class ev_ssm():
             tqdm progress bar
         """
         t_step = self.config['step'] / 3600  # t_step is in hours
-        Per = 0
         if tf - self.data['ts'] < 1e-5:
             logger.warning(f"{self.config['name']}: end time {tf}[H] is too close to start time {self.data['ts']}[H]," +
                            "simulation will not start.")
@@ -738,17 +740,18 @@ class ev_ssm():
                 if abs(t - self.data['ts']) < self.config['t_tol']:
                     continue
                 # --- update SSM A ---
+                Pi_input = Pi
                 if self.n_step % self.config['Np'] == 0:
                     if is_updateA:
                         self.g_A(is_update=True)
                     if is_rstate:
                         self.r_state()
-                        Per = self.data['Prc'] - self.data['Pr']  # error of AGC response
+                        self.data['Per'] = self.data['Pi'] - self.data['Prc']  # error of AGC response
                     self.report(is_report=False)
                 self.data['ts'] = self.g_ts(t)
                 self.g_u()  # update online status
                 # TODO: add warning when Pi is 0
-                Pi_input = Pi - self.config['ecc'] * Per  # * self.data['Per']
+                Pi_input += self.config['ecc'] * self.data['Per']
                 self.g_c(Pi=Pi_input, is_test=is_test)  # update control signal
                 # --- update soc interval and online status ---
                 # charging/discharging power, kW
@@ -777,7 +780,7 @@ class ev_ssm():
                 # Actual AGC response: AGC switched power if not modified. (MW)
                 self.data['Prc'] = np.sum(self.ev['agc'] * self.ev['Pc'] *
                                           (1 - self.ev['mod']) * (1 - self.ev['lc'])) * 1e-3
-
+                self.data['Pi'] = Pi
                 self.tsd = pd.concat([self.tsd, pd.DataFrame(data=self.data, index=[0])],
                                      ignore_index=True)
                 self.tsd.iloc[-1, 1] = Pi  # col 'Pr'
@@ -861,25 +864,25 @@ class ev_ssm():
         else:
             if abs(Pi) > self.config['Pdbd']:  # deadband
                 self.r_agc(Pi=Pi)
+                # --- update agc ---
+                self.ev['agc'] = 0
+                # online, not full
+                mask_nf = self.ev[(self.ev['u'] == 1) & (self.ev['soc'] < self.ev['socd'])].index
+                self.ev.loc[mask_nf, 'agc'] = 1 - self.ev.loc[mask_nf, 'c']
+                # online, full
+                mask_f = self.ev[(self.ev['u'] == 1) & (self.ev['soc'] >= self.ev['socd'])].index
+                self.ev.loc[mask_f, 'agc'] = 0 - self.ev.loc[mask_f, 'c']
+                # update counter
+                self.ev['na'] += self.ev['agc']
+                # update lc according to na when ICT is on
+                if self.config['ict']:
+                    lc0 = self.ev['lc'].values.copy().astype(int)
+                    self.ev['lc'] = (self.ev['na'] >= self.ev['nam']) & (self.ev['soc'].values < self.ev['socd'])
+                    self.ev['lc'] = self.ev['lc'].values | lc0  # once lc, never AGC
+                    self.ev['lc'] = self.ev['lc'].astype(int)
             else:
-                self.r_agc(Pi=0)
-
-            # --- update agc ---
-            self.ev['agc'] = 0
-            # online, not full
-            mask_nf = self.ev[(self.ev['u'] == 1) & (self.ev['soc'] < self.ev['socd'])].index
-            self.ev.loc[mask_nf, 'agc'] = 1 - self.ev.loc[mask_nf, 'c']
-            # online, full
-            mask_f = self.ev[(self.ev['u'] == 1) & (self.ev['soc'] >= self.ev['socd'])].index
-            self.ev.loc[mask_f, 'agc'] = 0 - self.ev.loc[mask_f, 'c']
-            # update counter
-            self.ev['na'] += self.ev['agc']
-            # update lc according to na when ICT is on
-            if self.config['ict']:
-                lc0 = self.ev['lc'].values.copy().astype(int)
-                self.ev['lc'] = self.ev['na'].values >= self.ev['nam']
-                self.ev['lc'] = self.ev['lc'].values | lc0  # once lc, never AGC
-                self.ev['lc'] = self.ev['lc'].astype(int)
+                pass
+                # self.r_agc(Pi=0)
             # --- revise control ---
             # `CS` for low charged EVs, and set 'lc' to 1
             mask = self.ev[(self.ev['soc'] <= self.config['socl']) & (self.ev['u']) == 1].index
@@ -1142,7 +1145,7 @@ class ev_ssm():
         iter = 0
         while (abs(error) >= self.config['er_tol']) & (iter < self.config['iter_tol']):
             error0 = error
-            u, v, us, vs = self.g_agc(Pi - self.data['Pr'])
+            u, v, us, vs = self.g_agc(Pi_cap - self.data['Pr'])
             # pereference signal
             usp = np.repeat(us.reshape(self.config['Ns']+1, 1), self.config['n_pref'], axis=1)
             vsp = np.repeat(vs.reshape(self.config['Ns']+1, 1), self.config['n_pref'], axis=1)
@@ -1246,9 +1249,7 @@ class ev_ssm():
         us = np.zeros(self.config['Ns']+1)
         vs = np.zeros(self.config['Ns']+1)
 
-        deadband = 1e-6
-
-        if Pi >= deadband:  # deadband0:  # RegUp
+        if Pi >= 0:  # RegUp
             # --- step I ---
             ru = min(Pi, self.Pa) / (self.Pave * self.data['nec'])  # total RegUp power
             u = np.zeros(self.config['Ns'])   # C->I
@@ -1265,7 +1266,7 @@ class ev_ssm():
             us[-1] = 1
             vs[-1] = 1
 
-        elif Pi <= -deadband:  # RegDn
+        elif Pi < 0:  # RegDn
             # --- step I ---
             rv = max(Pi, self.Pc) / (self.Pave * self.data['nec'])
             v = np.zeros(self.config['Ns'])
