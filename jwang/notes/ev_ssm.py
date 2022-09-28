@@ -414,15 +414,9 @@ class ev_ssm():
             ina = np.genfromtxt('ev_ina.csv', delimiter=',')
 
         # initialization of number of actions; truncated normal distribution;
-        self.ev['na'] = stats.truncnorm((-2000 - 400 * (self.ev['tf'] - self.data['ts'])) / (self.ev['soci'] * 100),
-                                        (8000 - 400 * (self.ev['tf'] - self.data['ts'])) / (self.ev['soci'] * 100),
-                                        loc=400 * (self.ev['tf'] - self.data['ts']), scale=self.ev['soci'] * 100).rvs(self.ev.shape[0],
-                                                                                                                      random_state=self.config['seed'])
-        self.ev['na'] = self.ev['na'].astype(int)
         sx0 = np.ceil(self.ev['soc'] / (1 / self.config['Ns'])) - 1
         # size of each sx
         sx0d = sx0.value_counts().sort_index()
-
         for i in sx0d.index:
             i = int(i)
             a, b = ina[i, 2], ina[i, 3]
