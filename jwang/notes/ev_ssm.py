@@ -420,12 +420,11 @@ class ev_ssm():
         for i in sx0d.index:
             i = int(i)
             a, b = ina[i, 2], ina[i, 3]
-            if a == b:
-                b = a + 0.01
+            if a == b: b = a + 0.01
             pdf = stats.norm(loc=0, scale=ina[i, 1])
             res = pdf.rvs(sx0d[float(i)], random_state=self.config['seed']).round(0)
             mask = self.ev[sx0 == i].index
-            self.ev.loc[mask, 'na'] = ina[i, 0] * (self.ev['tf'].iloc[mask] - 18) + res
+            self.ev.loc[mask, 'na'] = ina[i, 0] * (self.ev['tf'].iloc[mask] - self.data['ts']) + res
         mask = self.ev[(self.ev['soc'] < self.ev['socd']) & (self.ev['na'] < 0)].index
         na0 = 1000 * (self.ev['socd'] - self.ev['soc'])
         self.ev.loc[mask, 'na'] = na0.iloc[mask]
