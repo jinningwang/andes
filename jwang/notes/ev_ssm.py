@@ -433,7 +433,7 @@ class ev_ssm():
         # initialization of max number of actions;
         pcn = self.ev['Pc'].mean() * self.ev['nc'].mean()
         self.ev['nam'] = ((self.ev['tf'].mean() - self.ev['ts'].mean() + self.ev['tt']) * pcn
-                          - self.ev['socd'].mean() * self.ev['Q']) / (pcn * self.config['t_agc'] / 3600)
+                          - self.ev['socd'].mean() * self.ev['Q']) * 3600 / (pcn * self.config['t_agc'])
         self.ev['nam'] = self.ev['nam'].astype(int)
 
         if self.config['ict']:
@@ -894,7 +894,7 @@ class ev_ssm():
             self.ev.loc[mask, 'c'] = 1
             # `IS` for demanded charging EVs
             mask = self.ev[(self.ev['soc'] >= self.ev['socd']) & (self.ev['c'] == 1)].index
-            self.ev.loc[mask, 'c'] = 1
+            self.ev.loc[mask, 'c'] = 0
 
         # `IS` for offline EVs
         self.ev['c'] = self.ev['c'].astype(float) * self.ev['u'].astype(float)
