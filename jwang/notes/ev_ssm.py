@@ -431,17 +431,17 @@ class ev_ssm():
         self.ev['na'] = self.ev['na'].astype(int)
 
         # initialization of max number of actions;
-        pcn = self.ev['Pc'].mean() * self.ev['nc'].mean()
+        pcn = self.ev['Pc'] * self.ev['nc']
         self.ev['nam'] = ((self.ev['tf'].mean() - self.ev['ts'].mean() + self.ev['tt']) * pcn
-                          - self.ev['socd'].mean() * self.ev['Q']) * 3600 / (pcn * self.config['t_agc'])
+                          - self.ev['socd'] * self.ev['Q']) / (pcn * self.config['t_agc'] / 3600)
         self.ev['nam'] = self.ev['nam'].astype(int)
 
         if self.config['ict']:
-            cond1 = (self.ev['na'] >= self.ev['nam']) & (self.ev['soc'] < self.ev['socd'])
-            cond2 = self.ev['soc'] <= self.config['socl']
-            na_rid = self.ev[cond1 | cond2].index
-            self.ev.loc[na_rid, 'na'] = self.ev['nam'].iloc[na_rid]
-            self.ev.loc[na_rid, 'lc'] = 1
+            mask = self.ev[(self.ev['na'] >= self.ev['nam'])].index
+            self.ev.loc[mask, 'na'] = self.ev['nam'].iloc[mask]
+            self.ev.loc[mask, 'lc'] = 1
+        cond2 = self.ev['soc'] <= self.config['socl']
+        self.ev.loc[cond2, 'lc'] = 1
         self.g_u()
         # self.data['nec'] = self.ev['u'].sum() - self.ev["lc"].sum()  # numebr of online EVs with lc == 0
 
@@ -864,37 +864,39 @@ class ev_ssm():
         else:
             if abs(Pi) > self.config['Pdbd']:  # deadband
                 self.r_agc(Pi=Pi)
-                # --- update agc ---
-                self.ev['agc'] = 0
-                # online, not full
-                mask_nf = self.ev[(self.ev['u'] == 1) & (self.ev['soc'] < self.ev['socd'])].index
-                self.ev.loc[mask_nf, 'agc'] = 1 - self.ev.loc[mask_nf, 'c']
-                # online, full
-                mask_f = self.ev[(self.ev['u'] == 1) & (self.ev['soc'] >= self.ev['socd'])].index
-                self.ev.loc[mask_f, 'agc'] = 0 - self.ev.loc[mask_f, 'c']
-                # update counter
-                self.ev['na'] += self.ev['agc']
-                # update lc according to na when ICT is on
-                if self.config['ict']:
-                    lc0 = self.ev['lc'].values.copy().astype(int)
-                    self.ev['lc'] = (self.ev['na'] >= self.ev['nam']) & (self.ev['soc'].values < self.ev['socd'])
-                    self.ev['lc'] = self.ev['lc'].values | lc0  # once lc, never AGC
-                    self.ev['lc'] = self.ev['lc'].astype(int)
             else:
                 pass
                 # self.r_agc(Pi=0)
+            # --- update agc ---
+            self.ev['agc'] = 0
+            # online, not full
+            mask_nf = self.ev[(self.ev['u'] == 1) & (self.ev['soc'] < self.ev['socd'])].index
+            self.ev.loc[mask_nf, 'agc'] = 1 - self.ev.loc[mask_nf, 'c']
+            # online, full
+            mask_f = self.ev[(self.ev['u'] == 1) & (self.ev['soc'] >= self.ev['socd'])].index
+            self.ev.loc[mask_f, 'agc'] = 0 - self.ev.loc[mask_f, 'c']
+            # update counter
+            self.ev['agc'] = self.ev['agc'] * (1 - self.ev['lc'])
+            self.ev['na'] += self.ev['agc']
             # --- revise control ---
             # `CS` for low charged EVs, and set 'lc' to 1
             mask = self.ev[(self.ev['soc'] <= self.config['socl']) & (self.ev['u']) == 1].index
             self.ev.loc[mask, ['lc', 'c']] = 1
             self.ev['mod'] = 0
             self.ev.loc[mask, 'mod'] = 1
-            # `CS` for lc
-            mask = self.ev[(self.ev['u'] == 1) & (self.ev['lc'] == 1)].index
+            # `CS` for lc not full EVs
+            mask = self.ev[(self.ev['soc'] < self.ev['socd']) & (self.ev['lc'] == 1)].index
             self.ev.loc[mask, 'c'] = 1
-            # `IS` for demanded charging EVs
-            mask = self.ev[(self.ev['soc'] >= self.ev['socd']) & (self.ev['c'] == 1)].index
+            # `IS` for lc and full EVs
+            mask = self.ev[(self.ev['soc'] >= self.ev['socd']) & (self.ev['lc'] == 1)].index
             self.ev.loc[mask, 'c'] = 0
+
+            # update lc according to na when ICT is on
+            if self.config['ict']:
+                lc0 = self.ev['lc'].values.copy().astype(int)
+                self.ev['lc'] = (self.ev['na'] >= self.ev['nam'])
+                self.ev['lc'] = self.ev['lc'].values | lc0  # once lc, never AGC
+                self.ev['lc'] = self.ev['lc'].astype(int)
 
         # `IS` for offline EVs
         self.ev['c'] = self.ev['c'].astype(float) * self.ev['u'].astype(float)
@@ -1179,7 +1181,6 @@ class ev_ssm():
             self.ev['p'] = 1
             mask_p = self.ev[cond_ol & cond_nlc].index
             self.ev.loc[mask_p, 'p'] = np.random.uniform(low=0, high=1, size=len(mask_p))
-
             cond_pv = self.ev['p'] <= self.ev['pv']  # prob of EV to vs
             cond_pu = self.ev['p'] <= self.ev['pu']  # prob of EV to us
             cond_d = self.ev['c'] == -1  # EV in DS
@@ -1189,6 +1190,8 @@ class ev_ssm():
                 maskvs = self.ev[cond_ol & cond_nlc & cond_pv & cond_i].index
                 maskus = self.ev[cond_ol & cond_nlc & cond_pu & cond_c].index
                 self.ev.loc[maskvs, 'c'] = -1
+                mask = self.ev[((self.ev['c']!=0)) & (self.ev['lc']==1)].index
+                print(self.ev[['c', 'lc', 'p', 'pv', 'pu', 'na', 'nam']].iloc[mask])
                 self.ev.loc[maskus, 'c'] = 0
             elif us[-1] == -1:  # negative signal, I to C, D to I
                 maskvs = self.ev[cond_ol & cond_nlc & cond_pv & cond_d].index
@@ -1200,6 +1203,7 @@ class ev_ssm():
             # --- record output ---
             # TODO: modification of random traveling behavior
             self.x0 = self.x0 + np.matmul(self.B, u) + np.matmul(self.C, v)
+            self.g_u()
             self.ep()
             # dx0 = np.matmul(self.B, u) + np.matmul(self.C, v)
             # self.data['Pr'] = np.matmul(self.D, dx0)[0]
@@ -1383,7 +1387,7 @@ class ev_ssm():
         # predicted power when participating the
         # self.ev['psoc'].iloc[ridx] * self.ev['psoc'].iloc[ridx]
         ce = self.ev['Pc'] * self.ev['nc'] * (self.ev['tf'] - self.tsd['ts'].iloc[0])  # charging energy if no AGC
-        me = self.ev['Q'] * (self.ev['socd'] - self.soc0)  # max energy considering SOC demand
+        me = self.ev['Q'] * (self.ev['socd'] - self.ev['soc0'])  # max energy considering SOC demand
         ee = np.stack([ce.values, me.values]).T.min(axis=1)  # estimated energy
         ae = psoc * self.ev['Q']  # actual energy when AGC
         ict1 = (ee - ae) / self.ev['Pc'] / self.ev['nc']  # gap between ee and ae
