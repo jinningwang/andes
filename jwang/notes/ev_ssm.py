@@ -749,9 +749,11 @@ class ev_ssm():
                         self.data['Per'] = self.data['Pi'] - self.data['Prc']  # error of AGC response
                     self.report(is_report=False)
                 self.data['ts'] = self.g_ts(t)
+                nec0 = self.data['nec']
                 self.g_u()  # update online status
                 # TODO: add warning when Pi is 0
                 Pi_input += self.config['ecc'] * self.data['Per']
+                lc0 = self.ev['lc'].copy()
                 self.g_c(Pi=Pi_input, is_test=is_test)  # update control signal
                 # --- update soc interval and online status ---
                 # charging/discharging power, kW
@@ -779,7 +781,7 @@ class ev_ssm():
                 self.report(is_report=False)  # record power
                 # Actual AGC response: AGC switched power if not modified. (MW)
                 self.data['Prc'] = np.sum(self.ev['agc'] * self.ev['Pc'] *
-                                          (1 - self.ev['mod']) * (1 - self.ev['lc'])) * 1e-3
+                                          (1 - self.ev['mod']) * (1 - lc0)) * 1e-3
                 self.data['Pi'] = Pi
                 self.tsd = pd.concat([self.tsd, pd.DataFrame(data=self.data, index=[0])],
                                      ignore_index=True)
@@ -869,14 +871,17 @@ class ev_ssm():
                 # self.r_agc(Pi=0)
             # --- update agc ---
             self.ev['agc'] = 0
-            # online, not full
-            mask_nf = self.ev[(self.ev['u'] == 1) & (self.ev['soc'] < self.ev['socd'])].index
+            cond_ol = self.ev['u'] == 1
+            cond_nlc = self.ev['lc'] == 0
+            cond_socl = self.ev['soc'] < self.ev['socd']
+            cond_socu = self.ev['soc'] >= self.ev['socd']
+            # online and non lc, not full
+            mask_nf = self.ev[cond_ol & cond_socl & cond_nlc].index
             self.ev.loc[mask_nf, 'agc'] = 1 - self.ev.loc[mask_nf, 'c']
-            # online, full
-            mask_f = self.ev[(self.ev['u'] == 1) & (self.ev['soc'] >= self.ev['socd'])].index
+            # online and non lc, full
+            mask_f = self.ev[cond_ol & cond_socu & cond_nlc].index
             self.ev.loc[mask_f, 'agc'] = 0 - self.ev.loc[mask_f, 'c']
             # update counter
-            self.ev['agc'] = self.ev['agc'] * (1 - self.ev['lc'])
             self.ev['na'] += self.ev['agc']
             # --- revise control ---
             # `CS` for low charged EVs, and set 'lc' to 1
@@ -996,7 +1001,7 @@ class ev_ssm():
         out = [x/1000 for x in out]  # kW to MW
         return out
 
-    def ep(self):
+    def ep(self, ne=None):
         """
         Estimate output power (MW).
 
@@ -1006,13 +1011,15 @@ class ev_ssm():
             [Pt, Pu, Pl], total, upper, lower (MW)
         """
         # TODO: `ne` should be replaced with an recorded value
-        self.data['Pt'] = np.matmul(self.data['ne'] * self.D, self.x0)[0]
-        self.Pu = np.matmul(self.data['ne'] * self.Db, self.x0)[0]
-        self.Pl = np.matmul(self.data['ne'] * self.Dd, self.x0)[0]
-        self.Pa = self.data['ne'] * np.matmul(self.Da - self.D, self.x0)[0]
-        self.Pb = self.data['ne'] * np.matmul(self.Db - self.Da, self.x0)[0]
-        self.Pc = self.data['ne'] * np.matmul(self.Dc - self.D, self.x0)[0]
-        self.Pd = self.data['ne'] * np.matmul(self.Dd - self.Dc, self.x0)[0]
+        if not ne:
+            ne = self.data['ne']
+        self.data['Pt'] = np.matmul(ne * self.D, self.x0)[0]
+        self.Pu = np.matmul(ne * self.Db, self.x0)[0]
+        self.Pl = np.matmul(ne * self.Dd, self.x0)[0]
+        self.Pa = ne * np.matmul(self.Da - self.D, self.x0)[0]
+        self.Pb = ne * np.matmul(self.Db - self.Da, self.x0)[0]
+        self.Pc = ne * np.matmul(self.Dc - self.D, self.x0)[0]
+        self.Pd = ne * np.matmul(self.Dd - self.Dc, self.x0)[0]
         out = [self.data['Pt'], self.Pu, self.Pl, self.Pa, self.Pc]
         return out
 
@@ -1033,7 +1040,7 @@ class ev_ssm():
             [prumax, prdmax] (MW)
         """
         self.report(is_report=False)
-        self.ep()
+        self.ep(ne=self.data['nec'])
         RU = self.Pu - self.data['Pt']
         RD = self.data['Pt'] - self.Pl
         # --- demanded-SOC limited FRC is not that reasonable ---
@@ -1145,6 +1152,7 @@ class ev_ssm():
         # corrected control
         error = Pi_cap - self.data['Pr']
         iter = 0
+        Pr0 = self.data['Pr']
         while (abs(error) >= self.config['er_tol']) & (iter < self.config['iter_tol']):
             error0 = error
             u, v, us, vs = self.g_agc(Pi_cap - self.data['Pr'])
@@ -1186,29 +1194,36 @@ class ev_ssm():
             cond_d = self.ev['c'] == -1  # EV in DS
             cond_i = self.ev['c'] == 0  # EV in IS
             cond_c = self.ev['c'] == 1  # EV in CS
+            col = ['u', 'lc', 'agc', 'c', 'c0', 'na', 'nam', 'soc', 'socd']
             if us[-1] == 1:  # positive signal, I to D, C to I
                 maskvs = self.ev[cond_ol & cond_nlc & cond_pv & cond_i].index
                 maskus = self.ev[cond_ol & cond_nlc & cond_pu & cond_c].index
                 self.ev.loc[maskvs, 'c'] = -1
-                mask = self.ev[((self.ev['c']!=0)) & (self.ev['lc']==1)].index
-                print(self.ev[['c', 'lc', 'p', 'pv', 'pu', 'na', 'nam']].iloc[mask])
+                mask = self.ev[((self.ev['c'] == -1)) & (self.ev['lc']==1)].index
+                # print('positive signal, I to D, C to I')
+                # print(self.ev[col].iloc[mask])
                 self.ev.loc[maskus, 'c'] = 0
             elif us[-1] == -1:  # negative signal, I to C, D to I
                 maskvs = self.ev[cond_ol & cond_nlc & cond_pv & cond_d].index
                 maskus = self.ev[cond_ol & cond_nlc & cond_pu & cond_i].index
                 self.ev.loc[maskvs, 'c'] = 0
                 self.ev.loc[maskus, 'c'] = 1
+                mask = self.ev[((self.ev['c']!=0)) & (self.ev['lc']==1)].index
+                # print('negative signal, I to C, D to I')
+                # print(self.ev[col].iloc[maskus])
 
             self.g_x()
             # --- record output ---
             # TODO: modification of random traveling behavior
             self.x0 = self.x0 + np.matmul(self.B, u) + np.matmul(self.C, v)
             self.g_u()
-            self.ep()
+            self.ep(ne=self.data['nec'])
             # dx0 = np.matmul(self.B, u) + np.matmul(self.C, v)
             # self.data['Pr'] = np.matmul(self.D, dx0)[0]
             self.data['Pr'] += np.matmul(self.data['nec'] * self.D,
-                                         np.matmul(self.B, u) + np.matmul(self.C, v))[0]
+                                        np.matmul(self.B, u) + np.matmul(self.C, v))[0]
+            print('nec=', self.data['nec'])
+            print('Pr=', self.data['Pr'])
             error = Pi_cap - self.data['Pr']
             iter += 1
             if abs(error0 - error) < self.config['er_tol']:  # tolerante of control error
