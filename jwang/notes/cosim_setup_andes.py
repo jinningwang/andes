@@ -3,7 +3,7 @@ sse = ev_ssm(ts=caseH, N=50000, step=1, tp=40,
              lr=0.1, lp=60, seed=2022, name="EVA",
              n_pref=1, is_report=True,
              tt_mean=0.3, tt_var=0.01, tt_lb=0, tt_ub=0.6,
-             ict=ict, ecc=ecc)
+             ict=ict, ecc=ecc, agc=agc)
 sse.load_A("Aest.csv")
 # historical data
 ev_num = pd.read_csv("ev_num.csv")

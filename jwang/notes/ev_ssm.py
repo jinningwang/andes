@@ -186,7 +186,7 @@ class ev_ssm():
                  lr=0.1, lp=100, seed=None, name="EVA",
                  n_pref=1, is_report=True,
                  tt_mean=0.5, tt_var=0.02, tt_lb=0, tt_ub=1,
-                 ict=False, ecc=False, t_dur=1):
+                 ict=False, ecc=False, agc=False, t_dur=1):
         """
         Notes
         -----
@@ -230,7 +230,7 @@ class ev_ssm():
         # --- 1. init ---
         # TODO: improve documenation
         # --- sl/su: soc charging/dicharging boundary ---
-        self.config = OrderedDict(ict=ict, ecc=ecc,
+        self.config = OrderedDict(ict=ict, ecc=ecc, agc=agc,
                                   N=N, Ns=20, step=step, tp=tp, n_pref=n_pref,
                                   seed=seed, t_dur=t_dur, t_agc=t_agc,
                                   Np=int(tp/step), lr=lr, lp=lp,
@@ -783,6 +783,8 @@ class ev_ssm():
                 self.data['Prc'] = np.sum(self.ev['agc'] * self.ev['Pc'] *
                                           (1 - self.ev['mod']) * (1 - lc0)) * 1e-3
                 self.data['Pi'] = Pi
+                self.ep(ne=self.data['nec'])
+                
                 self.tsd = pd.concat([self.tsd, pd.DataFrame(data=self.data, index=[0])],
                                      ignore_index=True)
                 self.tsd.iloc[-1, 1] = Pi  # col 'Pr'
@@ -864,45 +866,54 @@ class ev_ssm():
         if is_test:
             pass
         else:
-            if abs(Pi) > self.config['Pdbd']:  # deadband
+            if self.config['agc'] & (abs(Pi) > self.config['Pdbd']):  # deadband
                 self.r_agc(Pi=Pi)
+                # `IS` for offline EVs
+                self.ev['c'] = self.ev['c'].astype(float) * self.ev['u'].astype(float)
+
+                # --- update agc ---
+                self.ev['agc'] = 0
+                cond_ol = self.ev['u'] == 1
+                cond_nlc = self.ev['lc'] == 0
+                cond_socl = self.ev['soc'] < self.ev['socd']
+                cond_socu = self.ev['soc'] >= self.ev['socd']
+                # online and non lc, not full
+                mask_nf = self.ev[cond_ol & cond_socl & cond_nlc].index
+                self.ev.loc[mask_nf, 'agc'] = 1 - self.ev.loc[mask_nf, 'c']
+                # online and non lc, full
+                mask_f = self.ev[cond_ol & cond_socu & cond_nlc].index
+                self.ev.loc[mask_f, 'agc'] = 0 - self.ev.loc[mask_f, 'c']
+                # update counter
+                self.ev['na'] += self.ev['agc']
+                # --- revise control ---
+                # `CS` for low charged EVs, and set 'lc' to 1
+                mask = self.ev[(self.ev['soc'] <= self.config['socl']) & (self.ev['u']) == 1].index
+                self.ev.loc[mask, ['lc', 'c']] = 1
+                self.ev['mod'] = 0
+                self.ev.loc[mask, 'mod'] = 1
+                # `CS` for lc not full EVs
+                mask = self.ev[(self.ev['soc'] < self.ev['socd']) & (self.ev['lc'] == 1)].index
+                self.ev.loc[mask, 'c'] = 1
+                # `IS` for lc and full EVs
+                mask = self.ev[(self.ev['soc'] >= self.ev['socd']) & (self.ev['lc'] == 1)].index
+                self.ev.loc[mask, 'c'] = 0
+
+                # update lc according to na when ICT is on
+                if self.config['ict']:
+                    lc0 = self.ev['lc'].values.copy().astype(int)
+                    self.ev['lc'] = (self.ev['na'] >= self.ev['nam'])
+                    self.ev['lc'] = self.ev['lc'].values | lc0  # once lc, never AGC
+                    self.ev['lc'] = self.ev['lc'].astype(int)
             else:
-                pass
-                # self.r_agc(Pi=0)
-            # --- update agc ---
-            self.ev['agc'] = 0
-            cond_ol = self.ev['u'] == 1
-            cond_nlc = self.ev['lc'] == 0
-            cond_socl = self.ev['soc'] < self.ev['socd']
-            cond_socu = self.ev['soc'] >= self.ev['socd']
-            # online and non lc, not full
-            mask_nf = self.ev[cond_ol & cond_socl & cond_nlc].index
-            self.ev.loc[mask_nf, 'agc'] = 1 - self.ev.loc[mask_nf, 'c']
-            # online and non lc, full
-            mask_f = self.ev[cond_ol & cond_socu & cond_nlc].index
-            self.ev.loc[mask_f, 'agc'] = 0 - self.ev.loc[mask_f, 'c']
-            # update counter
-            self.ev['na'] += self.ev['agc']
-            # --- revise control ---
-            # `CS` for low charged EVs, and set 'lc' to 1
-            mask = self.ev[(self.ev['soc'] <= self.config['socl']) & (self.ev['u']) == 1].index
-            self.ev.loc[mask, ['lc', 'c']] = 1
-            self.ev['mod'] = 0
-            self.ev.loc[mask, 'mod'] = 1
-            # `CS` for lc not full EVs
-            mask = self.ev[(self.ev['soc'] < self.ev['socd']) & (self.ev['lc'] == 1)].index
-            self.ev.loc[mask, 'c'] = 1
-            # `IS` for lc and full EVs
-            mask = self.ev[(self.ev['soc'] >= self.ev['socd']) & (self.ev['lc'] == 1)].index
-            self.ev.loc[mask, 'c'] = 0
-
-            # update lc according to na when ICT is on
-            if self.config['ict']:
-                lc0 = self.ev['lc'].values.copy().astype(int)
-                self.ev['lc'] = (self.ev['na'] >= self.ev['nam'])
-                self.ev['lc'] = self.ev['lc'].values | lc0  # once lc, never AGC
-                self.ev['lc'] = self.ev['lc'].astype(int)
-
+                # --- revise control ---
+                # `CS` for low charged EVs, and set 'lc' to 1
+                mask = self.ev[(self.ev['soc'] <= self.config['socl']) & (self.ev['u']) == 1].index
+                self.ev.loc[mask, ['lc', 'c']] = 1
+                self.ev['mod'] = 0
+                self.ev.loc[mask, 'mod'] = 1
+                # `IS` for full EVs
+                mask = self.ev[(self.ev['soc'] >= self.ev['socd'])].index
+                self.ev.loc[mask, 'c'] = 0
         # `IS` for offline EVs
         self.ev['c'] = self.ev['c'].astype(float) * self.ev['u'].astype(float)
         # reformatted control signal c2
