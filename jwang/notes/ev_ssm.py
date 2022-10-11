@@ -239,7 +239,7 @@ class ev_ssm():
                                   Np=int(tp/step), lr=lr, lp=lp,
                                   t_tol=0.1/3600, Pdbd=1e-4, er_tol=1, iter_tol=100,
                                   socl=0.005, socu=0.995, name=name)
-        self.data = OrderedDict(ts=ts, Pi=0, Pr=0, Prc=0, Per=0)
+        self.data = OrderedDict(ts=ts, Pi=0, Pr=0, Prc=0, Per=0, Pet=0)
         # Pdbd: deadband of Power
         self.build()
         self.report(is_report=is_report)
@@ -424,7 +424,8 @@ class ev_ssm():
         for i in sx0d.index:
             i = int(i)
             a, b = ina[i, 2], ina[i, 3]
-            if a == b: b = a + 0.01
+            if a == b:
+                b = a + 0.01
             pdf = stats.norm(loc=0, scale=ina[i, 1])
             res = pdf.rvs(sx0d[float(i)], random_state=self.config['seed']).round(0)
             mask = self.ev[sx0 == i].index
@@ -756,12 +757,13 @@ class ev_ssm():
                     if is_rstate:
                         self.r_state()
                         self.data['Per'] = self.data['Pi'] - self.data['Prc']  # error of AGC response
+                        self.data['Pet'] = self.data['Pt'] - self.data['Ptc']  # error of total output power
                     self.report(is_report=False)
                 self.data['ts'] = self.g_ts(t)
-                nec0 = self.data['nec']
                 self.g_u()  # update online status
                 # TODO: add warning when Pi is 0
-                Pi_input += self.config['ecc'] * self.data['Per']
+                Pi_input += self.config['ecc'] * (self.data['Per'])  # DEBUG: remove term ` + self.data['Pet']`
+                self.g_c(Pi=Pi_input, is_test=is_test)
                 lc0 = self.ev['lc'].copy()
                 self.g_c(Pi=Pi_input, is_test=is_test)  # update control signal
                 # --- update soc interval and online status ---
@@ -1181,7 +1183,6 @@ class ev_ssm():
             cond_d = self.ev['c'] == -1  # EV in DS
             cond_i = self.ev['c'] == 0  # EV in IS
             cond_c = self.ev['c'] == 1  # EV in CS
-            col = ['u', 'lc', 'agc', 'c', 'c0', 'na', 'nam', 'soc', 'socd']
             if us[-1] == 1:  # positive signal, I to D, C to I
                 maskvs = self.ev[cond_ol & cond_nlc & cond_pv & cond_i].index
                 maskus = self.ev[cond_ol & cond_nlc & cond_pu & cond_c].index
@@ -1192,14 +1193,14 @@ class ev_ssm():
                 maskus = self.ev[cond_ol & cond_nlc & cond_pu & cond_i].index
                 self.ev.loc[maskvs, 'c'] = 0
                 self.ev.loc[maskus, 'c'] = 1
-                mask = self.ev[((self.ev['c']!=0)) & (self.ev['lc']==1)].index
+                mask = self.ev[((self.ev['c'] != 0)) & (self.ev['lc'] == 1)].index
 
             self.g_x()
             # --- record output ---
             # TODO: modification of random traveling behavior
             self.x0 = self.x0 + np.matmul(self.B, u) + np.matmul(self.C, v)
             self.g_u()
-            self.ep(ne=self.data['nec'])  # DEBUG: ne=self.data['nec']
+            self.ep(ne=self.data['nec'])
             # dx0 = np.matmul(self.B, u) + np.matmul(self.C, v)
             # self.data['Pr'] = np.matmul(self.D, dx0)[0]
             # self.data['Pr'] += np.matmul(self.data['nec'] * self.D,
