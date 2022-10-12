@@ -241,7 +241,8 @@ class ev_ssm():
                                   socl=0.005, socu=0.995, name=name)
         self.data = OrderedDict(ts=ts, Pi=0, Pr=0, Prc=0, Per=0, Pet=0)
         # Pdbd: deadband of Power
-        self.build()
+        self.build(tt_mean=tt_mean, tt_var=tt_var,
+                   tt_lb=tt_lb, tt_ub=tt_ub)
         self.report(is_report=is_report)
         d2 = dict(ne=self.ev['u'].sum())
         self.data = {**self.data, **d2}
@@ -262,7 +263,7 @@ class ev_ssm():
         ncave = self.ev['nc'].mean()
         self.Th = (sdu - sdl) * Qave / (2 * self.Pave * ncave)
 
-    def build(self):
+    def build(self, tt_mean, tt_var, tt_lb, tt_ub):
         """
         Build the ev DataFrame.
 
@@ -306,10 +307,10 @@ class ev_ssm():
             self.soc_intv[i] = intv_single
         #  --- 1b. normal distribution parameters range ---
         ev_pdf_name = ['soci', 'socd', 'ts1', 'ts2', 'tf1', 'tf2', 'tt']
-        ev_pdf_data = {'mean': [0.3,    0.8,    -6.5,  17.5,   8.9,  32.9, 0.5],
-                       'var': [0.05,   0.03,   3.4,   3.4,   3.4,  3.4, 0.02],
-                       'lb': [0.2,    0.7,    0.0,   5.5,    0.0,  20.9, 0],
-                       'ub': [0.4,    0.9,    5.5,   24.0,   20.9, 24.0, 1],
+        ev_pdf_data = {'mean': [0.3,    0.8,    -6.5,  17.5,   8.9,  32.9, tt_mean],
+                       'var': [0.05,   0.03,   3.4,   3.4,   3.4,  3.4, tt_var],
+                       'lb': [0.2,    0.7,    0.0,   5.5,    0.0,  20.9, tt_lb],
+                       'ub': [0.4,    0.9,    5.5,   24.0,   20.9, 24.0, tt_ub],
                        'info':  ['initial SoC', 'demanded SoC',
                                  'start charging time 1', 'start charging time 2',
                                  'finish charging time 1', 'finish charging time 2',
@@ -1370,7 +1371,7 @@ class ev_ssm():
 
         return np.array([fcs, fis, fds])
 
-    def ict2(self, scaler=1):
+    def ict(self, scale=1):
         """
         Calculate increased charging time, using ``na``
 
@@ -1379,55 +1380,23 @@ class ev_ssm():
         scaler: int
             scaler for time, default unit is hour
         """
-        # predicted na; scale with running time
-        pna = (self.ev['na'] - self.ev['na0']) * (self.ev['tf'] -
-                                                  self.tsd['ts'].iloc[0]) / (self.data['ts'] - self.tsd['ts'].iloc[0])
-        if self.config['ict']:
-            pna[pna > self.ev['nam']] = self.ev['nam'][pna > self.ev['nam']]  # upper cap
-        pna[pna < 0] = 0  # lower cap TODO: is this necessary?
-        self.ev['ict'] = pna / self.ev['nc'] * self.config['t_agc'] / \
-            3600  # adjust by charging efficiency; unit: hour
-        self.ev['ict'] *= scaler  # scale
+        start_time = self.tsd['ts'].iloc[0]
+        end_time = self.tsd['ts'].iloc[-1]
+
+        cts = self.ev['ts']
+        masks = self.ev['ts'] < start_time
+        cts[masks] = start_time
+
+        cte = self.ev['tf']
+        maske = self.ev['tf'] > end_time
+        cte[maske] = end_time
+
+        ct = cte - cts
+
+        dsoc0 = self.ev['Pc'] * self.ev['nc'] * ct / self.ev['Q']
+        dsoc = self.ev['soc'] - self.ev['soc0']
+        td = (dsoc0 - dsoc) * self.ev['Q'] / self.ev['Pc'] / self.ev['nc']
+        self.ev['ict'] = td * scale
+        self.ev['ict'][self.ev['soc'] > self.ev['socd']] = 0
+        self.ev['ict'][self.ev['ict'] < 0] = 0
         return True
-
-    def ict(self, scaler=1):
-        """
-        Calculate increased charging time
-
-        Parameters
-        ----------
-        scaler: int
-            scaler for time, default unit is hour
-        """
-        self.ev['ict'] = 0
-        # for left cars, calculate ict with
-        # condition: left, not full
-        rid0 = self.ev[(self.ev['tf'] <= self.tsd['ts'].iloc[0] + 1) &
-                       (self.ev['soc'] < self.ev['socd'])].index  # no EV in this level for now
-        self.ev['ict'].iloc[rid0] = self.ev['na'].iloc[rid0]
-        # actual obtained soc, expected soc
-        esoc = self.ev['Pc'] * self.ev['nc'] / self.ev['Q']
-        ict0 = (self.ev['soc0'] - esoc) * self.ev['Q'] / self.ev['Pc'] / self.ev['nc']
-        self.ev.loc[rid0, 'ict'] = ict0.iloc[rid0]
-
-        # for staying cars, calculate an estimated increased charging
-        # condition: not leave, not full
-        rid1 = self.ev[(self.ev['tf'] > self.tsd['ts'].iloc[0] + 1) &
-                       (self.ev['soc'] < self.ev['socd'])].index  # EV row index
-        # predict SOC level when participating SFR; # delta SOC * remaining time
-        psoc = (self.ev['soc'] - self.ev['soc0']) * (self.ev['tf'] - self.tsd['ts'].iloc[0]) / \
-            (self.data['ts'] - self.tsd['ts'].iloc[0])  # scale with running time
-        # power0, - actual power
-        # supposed obtained charging power if no AGC
-        # self.ev['Pc'].iloc[ridx] * self.ev['nc'].iloc[ridx] * (self.ev['tf'].iloc[ridx]  - 18)
-        # predicted power when participating the
-        # self.ev['psoc'].iloc[ridx] * self.ev['psoc'].iloc[ridx]
-        ce = self.ev['Pc'] * self.ev['nc'] * (self.ev['tf'] - self.tsd['ts'].iloc[0])  # charging energy if no AGC
-        me = self.ev['Q'] * (self.ev['socd'] - self.ev['soc0'])  # max energy considering SOC demand
-        ee = np.stack([ce.values, me.values]).T.min(axis=1)  # estimated energy
-        ae = psoc * self.ev['Q']  # actual energy when AGC
-        ict1 = (ee - ae) / self.ev['Pc'] / self.ev['nc']  # gap between ee and ae
-        ict1[ict1 < 0] = 0  # reset negative values to 0
-        self.ev.loc[rid1, 'ict'] = ict1.iloc[rid1]
-        self.ev['ict'] *= scaler  # scale
-        # TODO: plot function
