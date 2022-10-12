@@ -36,12 +36,12 @@ if caseH == 10:
     # d_syn['sload'].iloc[2700:3000] -= 0.03 * k / 0.3
     # d_syn['sload'].iloc[3300:3600] += 0.05 * k / 0.3
 if caseH == 18:
-    k = 0.2  # the coefficient can be adjusted to fit the case
+    k = 0.1  # the coefficient can be adjusted to fit the case
     d_syn['s10'] = d_syn['h10'] + k * d_syn['a10']
     d_syn['s18'] = d_syn['h18'] + k * d_syn['a18']
     d_syn['sload'] = d_syn['s18']
     d_syn['sload'].iloc[0:300] -= 0.2 * k
-    # d_syn['sload'].iloc[200:700] = d_syn['sload'].iloc[200:700].rolling(80).mean()
+    d_syn.loc[500:1200, 'sload'] = d_syn['sload'].iloc[500:1200].rolling(10).mean()
 
     # d_syn['sload'] = d_syn['sload'].rolling(10).mean().interpolate(method='polynomial', order=1, inplace=False)
     # d_syn['sload'].iloc[100:600] = d_syn['sload'].iloc[100:600].rolling(10).mean().interpolate(method='polynomial', order=1, inplace=False)
