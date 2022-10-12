@@ -663,9 +663,6 @@ class ev_ssm():
         self.ev[['c', 'c2', 'c0']] = self.ev[['c', 'c2', 'c0']].astype(int)
 
         # --- update x ---
-        # --- find single EV sx --- can remove
-        # self.ev['sx'] = np.ceil(self.ev['soc'] / (1 / self.config['Ns'])) - 1
-        # self.ev['sx'] = self.ev['sx'].astype(int)
         self.g_x()
         self.g_xl()
 
@@ -704,9 +701,6 @@ class ev_ssm():
                 lambda x: 1 if (x[2] >= x[3]) & (x[1] == 1) else x[1], axis=1)
 
             # --- update x ---
-            # --- find single EV sx --- can remove
-            # self.ev['sx'] = np.ceil(self.ev['soc'] / (1 / self.config['Ns'])) - 1
-            # self.ev['sx'] = self.ev['sx'].astype(int)
             self.g_x()
             self.g_xl()
 
@@ -775,17 +769,14 @@ class ev_ssm():
                 self.ev.loc[masku, 'dP'] = self.ev.loc[masku, 'Pc'] * self.ev.loc[masku, 'nc']
                 self.ev.loc[maskl, 'dP'] = self.ev.loc[maskl, 'Pd'] * self.ev.loc[maskl, 'nd']
                 self.ev['dP'] = self.ev['dP'] * self.ev['u']
-                # --- update and modify SoC ---
+                # --- update and modify outranged SoC ---
                 self.ev['soc'] = self.ev['soc'] + t_step * self.ev['dP'] / self.ev['Q']
-                masku = self.ev[self.ev['soc'].astype(float) >= self.config['socu']].index
-                maskl = self.ev[self.ev['soc'].astype(float) <= self.config['socl']].index
-                self.ev.loc[masku, 'soc'] = self.config['socu']
-                self.ev.loc[maskl, 'soc'] = self.config['socl']
+                masku = self.ev[self.ev['soc'].astype(float) >= 1].index
+                maskl = self.ev[self.ev['soc'].astype(float) <= 0].index
+                self.ev.loc[masku, 'soc'] = 1
+                self.ev.loc[maskl, 'soc'] = 0
 
                 # --- update x ---
-                # --- find single EV sx --- can remove
-                # self.ev['sx'] = np.ceil(self.ev['soc'] / (1 / self.config['Ns'])) - 1
-                # self.ev['sx'] = self.ev['sx'].astype(int)
                 self.g_x()
 
                 if is_updateA:
@@ -1231,7 +1222,7 @@ class ev_ssm():
         self.ev.loc[mask_f, 'agc'] = 0 - self.ev.loc[mask_f, 'c']
         # update counter
         self.ev['na'] += self.ev['agc']
-        # revise control
+        # --- revise control ---
         # `CS` for low charged EVs, and set 'lc' to 1
         mask = self.ev[(self.ev['soc'] <= self.config['socl']) & (self.ev['u']) == 1].index
         self.ev.loc[mask, ['lc', 'c']] = 1

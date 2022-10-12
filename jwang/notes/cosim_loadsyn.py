@@ -39,7 +39,7 @@ if caseH == 18:
     k = 0.2  # the coefficient can be adjusted to fit the case
     d_syn['s10'] = d_syn['h10'] + k * d_syn['a10']
     d_syn['s18'] = d_syn['h18'] + k * d_syn['a18']
-    d_syn['sload'] = d_syn['s10']
+    d_syn['sload'] = d_syn['s18']
     d_syn['sload'].iloc[0:300] -= 0.2 * k
     # d_syn['sload'].iloc[200:700] = d_syn['sload'].iloc[200:700].rolling(80).mean()
 
