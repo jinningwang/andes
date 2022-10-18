@@ -160,7 +160,7 @@ print(f"Total cost={np.round(gtc+ftc, 2)}")
 cosim_out = pd.DataFrame()
 cosim_out['Time'] = ssa.dae.ts.t
 # alter the sign of ACE
-cosim_out['ACE'] = ssa.dae.ts.y[:, ssa.ACEc.ace.a].reshape(-1).copy() * ssa.config.mva * -1
+cosim_out['ACE'] = ssa.dae.ts.y[:, ssa.ACEc.ace.a].reshape(-1).copy() * ssa.config.mva  # DEBUG, remove coef. -1
 cosim_out['freq'] = ssa.dae.ts.y[:, ssa.COI.omega.a].reshape(-1).copy() * ssa.config.freq
 pout9 = ssa.dae.ts.y[:, ssa.TGOV1N.pout.a[2]].reshape(-1)
 pref9 = ssa.dae.ts.y[:, ssa.TGOV1N.pref.a[2]].reshape(-1)

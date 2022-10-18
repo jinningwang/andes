@@ -434,6 +434,12 @@ class ev_ssm():
         mask = self.ev[(self.ev['soc'] < self.ev['socd']) & (self.ev['na'] < 0)].index
         na0 = 1000 * (self.ev['socd'] - self.ev['soc'])
         self.ev.loc[mask, 'na'] = na0.iloc[mask]
+        # DEBUG: scale up soc [0.6, 0.7] na0
+        mask = self.ev[(self.ev['soc'] < 0.7) & (self.ev['soc'] > 0.5)].index
+        self.ev.loc[mask, 'na'] = na0.iloc[mask] * 10
+        # for fully charged EVs, reset their na to 0
+        mask = self.ev[(self.ev['soc'] >= self.ev['socd'])].index
+        self.ev.loc[mask, 'na'] = 0
         self.ev['na'] = self.ev['na'].astype(int)
 
         # initialization of max number of actions;
@@ -459,7 +465,7 @@ class ev_ssm():
         set2 = set(self.ev[(self.ev['ts'] >= self.data['ts'] + self.config['t_dur'])].index)
         set_in = set0 - set1 - set2
         self.ev = self.ev.iloc[list(set_in)].reset_index(drop=True)
-        self.ev['soc0'] = self.ev['soc'].copy()
+        self.ev['soc0'] = self.ev['soc'].astype(int)
         self.ev['na0'] = self.ev['na'].astype(int)
         self.g_x()
         self.r_state()
@@ -757,7 +763,7 @@ class ev_ssm():
                 self.data['ts'] = self.g_ts(t)
                 self.g_u()  # update online status
                 # TODO: add warning when Pi is 0
-                Pi_input += self.config['ecc'] * (self.data['Per'])  # DEBUG: remove term ` + self.data['Pet']`
+                Pi_input += self.config['ecc'] * (self.data['Pet'])  # DEBUG: remove term ` + self.data['Pet']`
                 self.g_c(Pi=Pi_input, is_test=is_test)
                 lc0 = self.ev['lc'].copy()
                 self.g_c(Pi=Pi_input, is_test=is_test)  # update control signal

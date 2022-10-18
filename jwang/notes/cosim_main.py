@@ -4,7 +4,7 @@ ssp.gen.max_p_mw = ssp.gen.max_p_mw
 # store original generator data
 ssp_gen0 = ssp.gen.copy()
 
-ssp.gen['p_mw'][ssp.gen.name==ev_idx] = sse.data["Ptc"]
+ssp.gen['p_mw'][ssp.gen.name == ev_idx] = sse.data["Ptc"]
 ssd.gen['p0'][ssd.gen.idx == ev_idx] = sse.data["Ptc"] / ssd.mva
 ssa.StaticGen.set(src='p0', attr='v', idx=ev_idx, value=sse.data["Ptc"] / ssa.config.mva)
 
@@ -15,7 +15,7 @@ for end_time in range(t_total):  # t_total
         # --- update load ---
         sfrur, sfrdr, load_exp = dp_calc(d_syn, idx_ed, intv_ed, rsfr)
         ssp.load['scaling'] = load_exp
-        ssp.gen['p_mw'][ssp.gen.name==ev_idx] = sse.data["Ptc"]
+        ssp.gen['p_mw'][ssp.gen.name == ev_idx] = sse.data["Ptc"]
         ssd.gen['p0'][ssd.gen.idx == ev_idx] = sse.data["Ptc"] / ssd.mva
         ssd.load['sf'] = load_exp
         ssd.update_dict()
@@ -107,7 +107,7 @@ for end_time in range(t_total):  # t_total
             agc_table['paux'] = ACE_input * agc_table['bd'] * agc_table['gammap']
         agc_in[end_time] = agc_table['paux']
         sfr_res_data[end_time // intv_agc] = [end_time, ACE_raw, dc_res.pru.sum(),
-                             -1*dc_res.prd.sum(), ACE_input]
+                                              -1*dc_res.prd.sum(), ACE_input]
 
         # --- record AGC ---
         if end_time > 0:

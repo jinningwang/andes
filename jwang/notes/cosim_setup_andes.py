@@ -1,5 +1,5 @@
 # --- EV Aggregator ---
-sse = ev_ssm(ts=caseH, N=50000, step=1, tp=20,
+sse = ev_ssm(ts=caseH, N=50000, step=1, tp=40,
              lr=0.1, lp=60, seed=2022, name="EVA",
              n_pref=1, is_report=True,
              tt_mean=0.2, tt_var=0.05, tt_lb=0, tt_ub=0.4,
