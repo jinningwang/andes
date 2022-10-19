@@ -8,7 +8,7 @@ ssp.gen['p_mw'][ssp.gen.name == ev_idx] = sse.data["Ptc"]
 ssd.gen['p0'][ssd.gen.idx == ev_idx] = sse.data["Ptc"] / ssd.mva
 ssa.StaticGen.set(src='p0', attr='v', idx=ev_idx, value=sse.data["Ptc"] / ssa.config.mva)
 
-for end_time in range(t_total):  # t_total
+for end_time in tqdm(range(t_total)):  # t_total
     # --- interval RTED ---
     if end_time % intv_ed == 0:
         idx_ed = end_time // intv_ed
@@ -185,10 +185,11 @@ for end_time in range(t_total):  # t_total
                     attr='v', value=sse.data["Ptc"] / ssa.config.mva)
 
     # run TDS
-    ssa.TDS.config.tf = end_time
     if end_time == 0:
         ssa.TDS.init()
-    ssa.TDS.run()
+    else:
+        ssa.TDS.config.tf = end_time
+        ssa.TDS.run()
     # update AGC PI Controller
     ACE_integral = ACE_integral + ssa.ACEc.ace.v.sum()
     ACE_raw = -(Kp*ssa.ACEc.ace.v.sum() + Ki*ACE_integral)
