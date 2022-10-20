@@ -465,7 +465,7 @@ class ev_ssm():
         set2 = set(self.ev[(self.ev['ts'] >= self.data['ts'] + self.config['t_dur'])].index)
         set_in = set0 - set1 - set2
         self.ev = self.ev.iloc[list(set_in)].reset_index(drop=True)
-        self.ev['soc0'] = self.ev['soc'].astype(int)
+        self.ev['soc0'] = self.ev['soc']
         self.ev['na0'] = self.ev['na'].astype(int)
         self.g_x()
         self.r_state()
