@@ -1,5 +1,5 @@
 import matplotlib.font_manager
-plt.style.use('ieee')
+plt.style.use(['science', 'ieee'])
 
 right = end_time
 
@@ -67,7 +67,8 @@ ax_gen[0, 2].set_ylabel('MW')
 ax_gen[0, 2].set_xlabel('Time [s]')
 ax_gen[0, 2].set_title('AGC input and SFR capacity')
 
-aced = ssa.dae.ts.y[:, ssa.ACEc.ace.a].reshape(-1) * ssa.config.mva
+ace_idx = ssa.TDS.plt._process_yidx(ssa.ACEc.ace, None)
+aced = ssa.TDS.plt.get_values(ace_idx).reshape(-1) * ssa.config.mva
 ssa.TDS.plt.plot(ssa.ACEc.ace,
                  legend=False, show=False, right=right,
                  linestyles=['-'], ytimes=ssa.config.mva,
@@ -82,7 +83,8 @@ ssa.TDS.plt.plot(ssa.COI.omega,
                  fig=fig_gen, ax=ax_gen[1, 1])
 
 f_coi = pd.DataFrame()
-f_coi['f'] = ssa.dae.ts.y[:, ssa.COI.omega.a].reshape(-1).copy() * ssa.config.freq - ssa.config.freq
+coif_idx = ssa.TDS.plt._process_yidx(ssa.COI.omega, None)
+f_coi['f'] = ssa.TDS.plt.get_values(coif_idx).reshape(-1) * ssa.config.mva * ssa.config.freq - ssa.config.freq
 f_coi.plot(kind='kde', legend=False, linewidth=1,
            fig=fig_gen, ax=ax_gen[1, 2],
            title=f'Freq. D., $\mu$={f_coi.f.mean().round(4)}, $\sigma$={f_coi.f.std().round(4)}')
@@ -116,21 +118,21 @@ new_cols = ['PV_1', 'PV_2', 'PV_3', 'PV_4', 'PV_5', 'PV_6',
 bu_df[new_cols].plot.bar(stacked=True, ax=axes[0], legend=False, color=color)
 bd_df[new_cols].plot.bar(stacked=True, ax=axes[1], legend=False, color=color)
 
-for ax in axes:
-    ax.tick_params(axis='x', labelrotation = 0)
-    ax.set_ylim([0, 1])
-    ax.set_yticklabels([f'{np.round(i*100,0)}%' for i in np.arange(0, 1.1, 0.2)])
-    ax.set_xticklabels([i for i in range(1,13,1)])
-    ax.set_xlabel('RTED interval')
-axes[0].set_title('(a) Case 1: RegUp balancing factor')
-axes[1].set_title('(b) Case 1: RegDn balancing factor')
-lines_labels = [ax.get_legend_handles_labels() for ax in axes]
-lines, labels = [sum(lol, []) for lol in zip(*lines_labels)]
-line_plot = lines[0:11]
-line_plot.reverse()
-label_g = ['G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9', 'G10', 'EV']
-label_g.reverse()
-figs.legend(line_plot, label_g, loc='center')
+# for ax in axes:
+#     ax.tick_params(axis='x', labelrotation = 0)
+#     ax.set_ylim([0, 1])
+#     ax.set_yticklabels([f'{np.round(i*100,0)}%' for i in np.arange(0, 1.1, 0.2)])
+#     ax.set_xticklabels([i for i in range(1,13,1)])
+#     ax.set_xlabel('RTED interval')
+# axes[0].set_title('(a) Case 1: RegUp balancing factor')
+# axes[1].set_title('(b) Case 1: RegDn balancing factor')
+# lines_labels = [ax.get_legend_handles_labels() for ax in axes]
+# lines, labels = [sum(lol, []) for lol in zip(*lines_labels)]
+# line_plot = lines[0:11]
+# line_plot.reverse()
+# label_g = ['G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9', 'G10', 'EV']
+# label_g.reverse()
+# figs.legend(line_plot, label_g, loc='center')
 
 # --- generation cost ---
 gtc = 0
@@ -159,9 +161,6 @@ print(f"Total cost={np.round(gtc+ftc, 2)}")
 # --- save data ---
 cosim_out = pd.DataFrame()
 cosim_out['Time'] = ssa.dae.ts.t
-# alter the sign of ACE
-cosim_out['ACE'] = ssa.dae.ts.y[:, ssa.ACEc.ace.a].reshape(-1).copy() * ssa.config.mva  # DEBUG, remove coef. -1
-cosim_out['freq'] = ssa.dae.ts.y[:, ssa.COI.omega.a].reshape(-1).copy() * ssa.config.freq
-pout9 = ssa.dae.ts.y[:, ssa.TGOV1N.pout.a[2]].reshape(-1)
-pref9 = ssa.dae.ts.y[:, ssa.TGOV1N.pref.a[2]].reshape(-1)
-cosim_out['paux9'] = ssa.config.mva * (pout9-pref9)
+cosim_out['ACE'] = aced
+coif_idx = ssa.TDS.plt._process_yidx(ssa.COI.omega, None)
+cosim_out['freq'] = ssa.TDS.plt.get_values(coif_idx).reshape(-1) * ssa.config.freq

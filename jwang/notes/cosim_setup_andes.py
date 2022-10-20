@@ -13,13 +13,23 @@ dir_path = os.path.abspath('..')
 case_path = '/case/ieee39_ev2.xlsx'
 case = dir_path + case_path
 ssa = andes.load(case,
-                 setup=True,
+                 setup=False,
                  no_output=True,
                  default_config=False)
+
+ssa.add("Output", dict(model='ACEc', varname='ace'))
+ssa.add("Output", dict(model='COI', varname='omega'))
+ssa.add("Output", dict(model='TGOV1N', varname='pout'))
+ssa.add("Output", dict(model='TGOV1N', varname='pref'))
+ssa.add("Output", dict(model='TGOV1N', varname='paux'))
+
+ssa.setup()
 
 # Set output mode as 'manual', turn off TDS progress bar
 ssa.TDS.config.save_mode = 'manual'
 ssa.TDS.config.no_tqdm = 1
+ssa.TDS.limit_store = 1
+ssa.TDS.save_every = 0
 
 # Set load as constant load.
 ssa.PQ.config.p2p = 1

@@ -198,3 +198,6 @@ for end_time in tqdm(range(t_total)):  # t_total
     # break loop if TDS run into error
     if ssa.exit_code != 0:
         raise ValueError(f"TDS error! Exit with {ssa.exit_code}, end at {end_time}s.")
+
+# save Time Series output
+ssa.TDS.save_output()
