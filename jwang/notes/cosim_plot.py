@@ -6,6 +6,7 @@ right = end_time
 # data format conversion
 ev_soc = pd.DataFrame(ev_soc_data.T, columns=range(t_total))
 ev_agc = pd.DataFrame(ev_agc_data.T, columns=range(t_total))
+ev_na = pd.DataFrame(ev_na_data.T, columns=range(t_total))
 sfr_res = pd.DataFrame(sfr_res_data, columns=['time', 'ace', 'up', 'dn', 'in'])
 sfr_res['ace'] = sfr_res['ace'] * ssa.config.mva
 sfr_res['up'] = sfr_res['up'] * ssa.config.mva

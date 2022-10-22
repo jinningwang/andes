@@ -441,6 +441,7 @@ class ev_ssm():
         mask = self.ev[(self.ev['soc'] >= self.ev['socd'])].index
         self.ev.loc[mask, 'na'] = 0
         self.ev['na'] = self.ev['na'].astype(int)
+        self.ev['nama'] = 0  # `nama` is the number of action mileage
 
         # initialization of max number of actions;
         pcn = self.ev['Pc'] * self.ev['nc']
@@ -1228,6 +1229,7 @@ class ev_ssm():
         self.ev.loc[mask_f, 'agc'] = 0 - self.ev.loc[mask_f, 'c']
         # update counter
         self.ev['na'] += self.ev['agc']
+        self.ev['nama'] += self.ev['agc'].abs()
         # --- revise control ---
         # `CS` for low charged EVs, and set 'lc' to 1
         mask = self.ev[(self.ev['soc'] <= self.config['socl']) & (self.ev['u']) == 1].index
