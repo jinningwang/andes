@@ -2,9 +2,11 @@
 if case_name == 'npcc':
     ev_gen = 'PV_49'
     ssp_tol = 1e-1
+    opf_alt = 0
 elif case_name == 'ieee39':
     ev_gen = 'PV_10'
     ssp_tol = 1e-3
+    opf_alt = 1
 
 ssa.PV.set(src='p0', idx=ev_gen, attr='v', value=30 / ssa.config.mva)
 ssa.PV.set(src='pmax', idx=ev_gen, attr='v', value=99999 / ssa.config.mva)

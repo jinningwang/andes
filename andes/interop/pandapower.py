@@ -139,7 +139,7 @@ def make_link_table(ssa):
 
 
 @require_pandapower
-def runopp_map(ssp, link_table, **kwargs):
+def runopp_map(ssp, link_table,  alt=0, **kwargs):
     """
     Run OPF in pandapower using ``pp.runopp()`` and map results back to ANDES
     based on the link table.
@@ -151,6 +151,9 @@ def runopp_map(ssp, link_table, **kwargs):
 
     link_table : DataFrame
         The link table of ADNES system
+
+    alt : int
+        Alternative method when ACOPF fails, 0 for ACPF, and others for DCOPF
 
     Returns
     -------
@@ -170,8 +173,11 @@ def runopp_map(ssp, link_table, **kwargs):
     try:
         pp.runopp(ssp, **kwargs)
     except Exception:
-        logger.warning("ACOPF failed, try ACPF.")
-        pp.runpp(ssp, **kwargs)
+        logger.warning("ACOPF failed, try Alternative.")
+        if alt == 0:
+            pp.runpp(ssp, **kwargs)
+        else:
+            pp.rundcopp(ssp, **kwargs)
 
     # take dispatch results from pp
     ssp_gen = ssp.gen.rename(columns={'name': 'stg_idx'})

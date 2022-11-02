@@ -79,7 +79,7 @@ for end_time in tqdm(range(t_total)):  # t_total
             p0 = [0] * ssa_key2.shape[0]
 
         # solve ACOPF
-        ac_res = runopp_map(ssp, ssa_key)  # ACOPF resutls
+        ac_res = runopp_map(ssp, ssa_key, alt=opf_alt)  # ACOPF resutls
         ac_res['p0'] = p0                  # last setpoints
         ac_res.fillna(False, inplace=True)  # Fill NA wil False
 

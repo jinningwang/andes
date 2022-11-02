@@ -17,24 +17,6 @@ col2 = ['a10', 'a18']
 d_syn[col1] = (d_syn[col1] - d_syn[col1].min()) / d_syn[col1].min() + 0.8
 d_syn[col2] = (d_syn[col2] - d_syn[col2].mean()) / (d_syn[col2].max() - d_syn[col2].min())
 
-if caseH == 10:
-    k = 0.4  # the coefficient can be adjusted to fit the case
-    d_syn['s10'] = d_syn['h10'] + k * d_syn['a10']
-    d_syn['s18'] = d_syn['h18'] + k * d_syn['a18']
-    d_syn['sload'] = d_syn['s10']
-    # d_syn['sload'] = d_syn['sload'].rolling(10).mean().interpolate(method='polynomial', order=1, inplace=False)
-    # d_syn['sload'].iloc[0:310] -= 0.05 * k / 0.3
-    # # d_syn['sload'].iloc[250:350] = None
-    # # d_syn['sload'].iloc[250:350].interpolate(method='polynomial', order=3, inplace=True)
-    # d_syn['sload'].iloc[400:650] += 2 * (0.8 - d_syn['sload'].iloc[300:600])
-    # d_syn['sload'].iloc[600:900] += 0.02 * k / 0.3
-    # # d_syn['sload'].iloc[450:650] = None
-    # # d_syn['sload'].iloc[450:650].interpolate(method='polynomial', order=9, inplace=True)
-    # d_syn['sload'].iloc[900:1200] += 0.03 * k / 0.3
-    # d_syn['sload'].iloc[1200:1800] -= 0.06 * k / 0.3
-    # d_syn['sload'].iloc[2100:2400] += 0.02 * k / 0.3
-    # d_syn['sload'].iloc[2700:3000] -= 0.03 * k / 0.3
-    # d_syn['sload'].iloc[3300:3600] += 0.05 * k / 0.3
 if case_name == 'ieee39':
     k = 0.1  # the coefficient can be adjusted to fit the case
     d_syn['s10'] = d_syn['h10'] + k * d_syn['a10']
