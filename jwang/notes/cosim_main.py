@@ -4,9 +4,9 @@ ssp.gen.max_p_mw = ssp.gen.max_p_mw
 # store original generator data
 ssp_gen0 = ssp.gen.copy()
 
-ssp.gen['p_mw'][ssp.gen.name == ev_idx] = sse.data["Ptc"]
-ssd.gen['p0'][ssd.gen.idx == ev_idx] = sse.data["Ptc"] / ssd.mva
-ssa.StaticGen.set(src='p0', attr='v', idx=ev_idx, value=sse.data["Ptc"] / ssa.config.mva)
+ssp.gen['p_mw'][ssp.gen.name == ev_gen] = sse.data["Ptc"]
+ssd.gen['p0'][ssd.gen.idx == ev_gen] = sse.data["Ptc"] / ssd.mva
+ssa.StaticGen.set(src='p0', attr='v', idx=ev_gen, value=sse.data["Ptc"] / ssa.config.mva)
 
 for end_time in tqdm(range(t_total)):  # t_total
     # --- interval RTED ---
@@ -15,8 +15,8 @@ for end_time in tqdm(range(t_total)):  # t_total
         # --- update load ---
         sfrur, sfrdr, load_exp = dp_calc(d_syn, idx_ed, intv_ed, rsfr)
         ssp.load['scaling'] = load_exp
-        ssp.gen['p_mw'][ssp.gen.name == ev_idx] = sse.data["Ptc"]
-        ssd.gen['p0'][ssd.gen.idx == ev_idx] = sse.data["Ptc"] / ssd.mva
+        ssp.gen['p_mw'][ssp.gen.name == ev_gen] = sse.data["Ptc"]
+        ssd.gen['p0'][ssd.gen.idx == ev_gen] = sse.data["Ptc"] / ssd.mva
         ssd.load['sf'] = load_exp
         ssd.update_dict()
 
@@ -37,7 +37,10 @@ for end_time in tqdm(range(t_total)):  # t_total
         # estiamte FRC
         [prumax, prdmax] = sse.g_frc()  # check later
         # def. percentage of EV SFR capacities
-        ssd.def_type2([ev_idx], [prumax*rru/ssd.mva], [prdmax*rrd/ssd.mva])
+        ssd.def_type2([ev_gen], [prumax*rru/ssd.mva], [prdmax*rrd/ssd.mva])
+        if case_name == 'npcc':
+            ssd.gen.loc[ev_gen, 'prumax'] = prumax * rru / ssd.mva
+            ssd.gen.loc[ev_gen, 'prdmax'] = prdmax * rrd / ssd.mva
         ssd.def_sfr(sfrur=sfrur*ssa_p0_sum, sfrdr=sfrdr*ssa_p0_sum)
 
         # solve RTED
@@ -113,8 +116,14 @@ for end_time in tqdm(range(t_total)):  # t_total
         if end_time > 0:
             gref = ssa.TurbineGov.get(src='pref', attr='v', idx=agc_gov_idx)
             gout = ssa.TurbineGov.get(src='pout', attr='v', idx=agc_gov_idx)
-            g_aux = gout - gref
-            agc_out[end_time] = np.append(g_aux, [sse.data["Prc"]/ssa.config.mva])
+            tmp_df = pd.DataFrame()
+            tmp_df['gov_idx'] = agc_gov_idx
+            tmp_df[end_time] = gout - gref
+            tmp_df2 = tmp_df.merge(right=agc_table,
+                                on='gov_idx', how='right')
+            tmp_df3 = tmp_df2[['stg_idx', end_time]].merge(right=ssa_key2,
+                                    on='stg_idx', how='right')
+            agc_out[end_time] = tmp_df3[end_time]
 
         # --- assign AGC ---
         # a.SynGen
@@ -126,7 +135,7 @@ for end_time in tqdm(range(t_total)):  # t_total
                    value=agc_table["paux"][cond_agc_dg].values)
         # c.EV;
         # Note: EV is in group DG, remove EV set if not used for EV SSM
-        sse_agc = ssa.config.mva * agc_table[agc_table.stg_idx == ev_idx].paux.values
+        sse_agc = ssa.config.mva * agc_table[agc_table.stg_idx == ev_gen].paux.values
         # TODO: RenGen
 
         # --- smooth setpoints ---
@@ -159,8 +168,13 @@ for end_time in tqdm(range(t_total)):  # t_total
         stg_opf_idx = ac_res.stg_idx[ac_res.controllable].tolist()
         stg_opf_val = ac_res.p[ac_res.controllable].tolist()
         stg_opf_v = ac_res.vm_pu[ac_res.controllable].tolist()
-        ssa.StaticGen.set(src='p0', idx=stg_opf_idx, attr='v', value=stg_opf_val)
-        ssa.StaticGen.set(src='v0', idx=stg_opf_idx, attr='v', value=stg_opf_v)
+        v0 = ssa.StaticGen.get(src='v0', idx=stg_opf_idx, attr='v')
+        if not np.mean(stg_opf_v) == 1:
+            ssa.StaticGen.set(src='p0', idx=stg_opf_idx, attr='v', value=stg_opf_val)
+            ssa.StaticGen.set(src='v0', idx=stg_opf_idx, attr='v', value=stg_opf_v)
+        else:
+            ssa.StaticGen.set(src='p0', idx=stg_opf_idx, attr='v', value=1.1 * np.array(stg_opf_val))
+            ssa.StaticGen.set(src='v0', idx=stg_opf_idx, attr='v', value=v0)
         # initial load point set as the dispatch point
         ssa.PQ.set(src='p0', idx=ssa_pq_idx, attr='v',
                    value=ssa_p0 * load_exp)
@@ -181,7 +195,7 @@ for end_time in tqdm(range(t_total)):  # t_total
         ev_na_data[end_time] = sse.ev["na"].iloc[ridx]
 
         sse.report(is_report=False)
-        ssa.EV2.set(src='pref0', idx=ac_res.dg_idx[ac_res.stg_idx == ev_idx].values[0],
+        ssa.EV2.set(src='pref0', idx=ac_res.dg_idx[ac_res.stg_idx == ev_gen].values[0],
                     attr='v', value=sse.data["Ptc"] / ssa.config.mva)
 
     # run TDS

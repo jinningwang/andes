@@ -37,14 +37,23 @@ if caseH == 10:
     # d_syn['sload'].iloc[3300:3600] += 0.05 * k / 0.3
 if caseH == 18:
     k = 0.1  # the coefficient can be adjusted to fit the case
+    k2 = 0.2
+    kr = 10
     d_syn['s10'] = d_syn['h10'] + k * d_syn['a10']
     d_syn['s18'] = d_syn['h18'] + k * d_syn['a18']
     d_syn['sload'] = d_syn['s18']
-    d_syn['sload'].iloc[0:300] -= 0.2 * k
-    d_syn.loc[500:1200, 'sload'] = d_syn['sload'].iloc[500:1200].rolling(10).mean()
-
-    # d_syn['sload'] = d_syn['sload'].rolling(10).mean().interpolate(method='polynomial', order=1, inplace=False)
-    # d_syn['sload'].iloc[100:600] = d_syn['sload'].iloc[100:600].rolling(10).mean().interpolate(method='polynomial', order=1, inplace=False)
+    d_syn['sload'].iloc[0:300] -= k2 * k
+    d_syn.loc[500:1200, 'sload'] = d_syn['sload'].iloc[500:1200].rolling(kr).mean()
+if case_name == 'npcc':
+    k = 0.005
+    k2 = 0.0
+    kr = 10
+    d_syn['s10'] = d_syn['h10'] + k * d_syn['a10']
+    d_syn['s18'] = d_syn['h18'] + k * d_syn['a18']
+    d_syn['sload'] = d_syn['s18']
+    d_syn['sload'] = d_syn['sload'].rolling(kr).mean()
+    d_syn['sload'] *= 0.8 
+    d_syn['sload'] += 0.3
 
 # calculate expected load
 step = 300
@@ -53,8 +62,12 @@ d_exp['time'] = range(0,3600,300)
 
 # # align starting point of load with starting point of dispatch results
 d_syn['sload'].iloc[0] = d_exp['sload'].iloc[0]
-d_syn['sload'].iloc[1:50] = None
-d_syn['sload'].interpolate(method='linear', inplace=True)
+if case_name == 'npcc':
+    d_syn['sload'].iloc[1:10] = None
+    d_syn['sload'].interpolate(method='linear', inplace=True)
+else:
+    d_syn['sload'].iloc[1:50] = None
+    d_syn['sload'].interpolate(method='linear', inplace=True)
 
 # --- plot load curve ---
 fig_load, ax_load = plt.subplots(figsize=(5, 4))
