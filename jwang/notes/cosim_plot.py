@@ -28,8 +28,9 @@ yheader = [f'G{i}' for i in range(1, 11)]
 
 ssa.TDS.plt.plot(ssa.TGOV1N.pout,
                  linestyles=['-'],
-                 yheader=yheader, ytimes=ssa.config.mva,
-                 legend=True, show=False, right=right,
+                #  yheader=yheader,
+                 ytimes=ssa.config.mva,
+                 legend=False, show=False, right=right,
                  title=r'Generation (solid: pout; dash: pref)',
                  ylabel='MW',
                  fig=fig_gen, ax=ax_gen[0, 0])
@@ -41,7 +42,8 @@ ssa.TDS.plt.plot(ssa.TGOV1N.pref, ytimes=ssa.config.mva,
 
 ssa.TDS.plt.plot(ssa.TGOV1N.paux,
                  linestyles=['-'],
-                 yheader=yheader, ytimes=ssa.config.mva,
+                #  yheader=yheader,
+                 ytimes=ssa.config.mva,
                  legend=False, show=False, right=right,
                  title=r'AGC power', ylabel='MW',
                  fig=fig_gen, ax=ax_gen[0, 1])
@@ -106,7 +108,7 @@ bu_df = pd.DataFrame(bu, columns=col)
 bd_df = pd.DataFrame(bd, columns=col)
 pg_df = pd.DataFrame(pg, columns=col)
 
-plt.style.use('ieee')
+plt.style.use('science')
 color = ['tab:blue', 'yellow', 'tab:green',
          'tab:red', 'tab:purple', 'tab:brown',
          'tab:pink', 'tab:gray', 'tab:olive', 'tab:cyan', 'tab:orange']
@@ -116,52 +118,12 @@ plt.subplots_adjust(left=None, bottom=None, right=None,
                     top=None, wspace=0.35, hspace=None)
 new_cols = ['PV_1', 'PV_2', 'PV_3', 'PV_4', 'PV_5', 'PV_6',
             'PV_7', 'PV_8', 'PV_9', 'Slack_10', 'PV_10']
-bu_df[new_cols].plot.bar(stacked=True, ax=axes[0], legend=False, color=color)
-bd_df[new_cols].plot.bar(stacked=True, ax=axes[1], legend=False, color=color)
-
-# for ax in axes:
-#     ax.tick_params(axis='x', labelrotation = 0)
-#     ax.set_ylim([0, 1])
-#     ax.set_yticklabels([f'{np.round(i*100,0)}%' for i in np.arange(0, 1.1, 0.2)])
-#     ax.set_xticklabels([i for i in range(1,13,1)])
-#     ax.set_xlabel('RTED interval')
-# axes[0].set_title('(a) Case 1: RegUp balancing factor')
-# axes[1].set_title('(b) Case 1: RegDn balancing factor')
-# lines_labels = [ax.get_legend_handles_labels() for ax in axes]
-# lines, labels = [sum(lol, []) for lol in zip(*lines_labels)]
-# line_plot = lines[0:11]
-# line_plot.reverse()
-# label_g = ['G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9', 'G10', 'EV']
-# label_g.reverse()
-# figs.legend(line_plot, label_g, loc='center')
-
-# --- generation cost ---
-gtc = 0
-for i in pg_df.index:
-    c = ssd.cost.c2.values * np.power(pg_df.loc[i].values, 2) \
-        + ssd.cost.c1.values * pg_df.loc[i].values \
-        + ssd.cost.c1.values
-    gtc += np.sum(c)
-
-agc_out.fillna(0, inplace=True)
-agc_out_sort = pd.merge(left=agc_out.rename(columns={'stg_idx':'idx'}),
-                        right=ssd.cost[['idx']], on='idx', how='right')
-agc_mile = pd.DataFrame(columns=list(np.arange(intv_agc, t_total, intv_agc)))
-for col_id in np.arange(intv_agc, t_total, intv_agc):
-    agc_mile[col_id] = np.abs(agc_out_sort[col_id] - agc_out_sort[int(col_id-intv_agc)])
-agc_mile[agc_mile.columns] *= 100
-
-# --- SFR mileage cost ---
-ftc = 0
-for i in agc_mile.columns:
-    c = ssd.cost.c1.abs().values * agc_mile[i].values
-    ftc += np.sum(c)
-
-print(f"Total cost={np.round(gtc+ftc, 2)}")
-
-# --- save data ---
-cosim_out = pd.DataFrame()
-cosim_out['Time'] = ssa.dae.ts.t
-cosim_out['ACE'] = aced
-coif_idx = ssa.TDS.plt._process_yidx(ssa.COI.omega, None)
-cosim_out['freq'] = ssa.TDS.plt.get_values(coif_idx).reshape(-1) * ssa.config.freq
+if case_name == 'npcc':
+    pass
+    # bu_df[new_cols].plot.bar(stacked=True, ax=axes[0], legend=False)
+    # bd_df[new_cols].plot.bar(stacked=True, ax=axes[1], legend=False)
+elif case_name == 'ieee39':
+    bu_df[new_cols].plot.bar(stacked=True, ax=axes[0], legend=False, color=color)
+    bd_df[new_cols].plot.bar(stacked=True, ax=axes[1], legend=False, color=color)
+else:
+    pass
