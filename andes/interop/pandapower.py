@@ -170,8 +170,8 @@ def runopp_map(ssp, link_table, **kwargs):
     try:
         pp.runopp(ssp, **kwargs)
     except Exception:
-        pp.rundcopp(ssp, **kwargs)
-        logger.warning("ACOPF failed, DCOPF is used instead.")
+        logger.warning("ACOPF failed, try ACPF.")
+        pp.runpp(ssp, **kwargs)
 
     # take dispatch results from pp
     ssp_gen = ssp.gen.rename(columns={'name': 'stg_idx'})
