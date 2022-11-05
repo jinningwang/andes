@@ -100,21 +100,25 @@ ssa_key2['ctrl'] = ssa_key2['gov_idx'].astype(bool)
 ssa_key2.loc[ssa_key2[ssa_key2['stg_idx'] == ev_gen].index[0], 'ctrl'] = False
 # NOTE: for NPCC case, set slack gen as uncontrollable
 if case_name == 'npcc':
-    gen_op_idx = ['PV_15', 'PV_23', 'PV_24', 'PV_25', 'PV_34', 'PV_37', 'PV_38',
-                  'PV_39', 'PV_40', 'PV_41', 'PV_42', 'PV_43', 'PV_44', 'PV_45',
-                  'PV_46', 'PV_47', 'PV_48', 'PV_14', 'PV_22', 'PV_3', 'PV_4',
-                  'PV_6', 'PV_17', 'PV_1', 'PV_5', 'PV_7', 'PV_28', 'PV_20',
-                  'PV_10', 'PV_11', 'PV_21', 'PV_12', 'PV_19', 'PV_30',
-                  'PV_8', 'PV_9', 'Slack_27',
-                  'PV_18', 'PV_36', 'PV_31', 'PV_49']
-    ssa_key2.loc[ssa_key2[ssa_key2['stg_idx'].isin(gen_op_idx)].index, 'ctrl'] = False
+    ssa_key2['ctrl'] = False
+    gen_op_idx = ['PV_1', 'PV_2', 'PV_3', 'PV_4', 'PV_5', 'PV_6', 'PV_7',
+                  'PV_8', 'PV_9', 'PV_10', 'PV_11', 'PV_12', 'PV_13',
+                  'PV_14', 'PV_16', 'PV_17', 'PV_18', 'PV_19',
+                  'PV_20', 'PV_21', 'PV_22', 'Slack_27',
+                  'PV_28', 'PV_29', 'PV_30', 'PV_31', 'PV_35', 'PV_36']
+    ssa_key2.loc[ssa_key2[ssa_key2['stg_idx'].isin(gen_op_idx)].index, 'ctrl'] = True
 # ssp
 sspc_df = ssa_key2[['stg_name', 'ctrl']]
 sspc_df.columns = ['name', 'controllable']
 sspc_df = ssp.gen[['name']].merge(right=sspc_df, on='name', how='left')
 ssp.gen['controllable'] = sspc_df['controllable']
-if case_name == 'npcc':
-    ssp.gen.loc[[4, 5, 6], 'controllable'] = False
+
+gen_rid = ssp.gen[ssp.gen['controllable'] == False].index
+ssp.gen.loc[gen_rid, 'max_p_mw'] = ssp.gen.loc[gen_rid, 'p_mw']
+ssp.gen.loc[gen_rid, 'min_p_mw'] = ssp.gen.loc[gen_rid, 'p_mw']
+ssp.gen['controllable'] = True
+ssp.gen.loc[ev_rid, 'controllable'] = False
+
 # ssd
 ssdc_df = ssa_key2[['stg_name', 'ctrl']]
 ssdc_df.columns = ['idx', 'ctrl']

@@ -54,8 +54,9 @@ for end_time in tqdm(range(t_total)):  # t_total
                            right=dc_res.rename(columns={'gen': 'stg_idx'}),
                            on='stg_idx', how='left')
         # SFR limits
-        ssp_gen['max_sfr'] = ssp_gen.max_p_mw - ssp_gen.pru * ssp.sn_mva
-        ssp_gen['min_sfr'] = ssp_gen.min_p_mw + ssp_gen.prd * ssp.sn_mva
+        ssp_gen['max_sfr'] = ssp_gen['max_p_mw'] - ssp_gen['pru'] * ssp.sn_mva
+        ssp_gen['min_sfr'] = ssp_gen['min_p_mw'] + ssp_gen['prd'] * ssp.sn_mva
+        ssp_gen['p_mw'] = ssp_gen['pg'] * ssp.sn_mva
         # ramp limits
         if end_time > 0:
             p_pre_pp = pd.merge(left=ssp.gen.rename(columns={'name': 'stg_idx'}),
@@ -64,12 +65,16 @@ for end_time in tqdm(range(t_total)):  # t_total
             ssp_gen['max_ramp'] = ssp.sn_mva * (np.array(p_pre_pp) + np.array(ssd.gen['ramp_5']))
             ssp_gen['min_ramp'] = ssp.sn_mva * (np.array(p_pre_pp) - np.array(ssd.gen['ramp_5']))
             # alter generator limits
-            ssp.gen.max_p_mw = ssp_gen[['max_sfr', 'max_ramp']].min(axis=1)
-            ssp.gen.min_p_mw = ssp_gen[['min_sfr', 'min_ramp']].max(axis=1)
+            ssp.gen['max_p_mw'] = ssp_gen[['max_sfr', 'max_ramp']].min(axis=1)
+            ssp.gen['min_p_mw'] = ssp_gen[['min_sfr', 'min_ramp']].max(axis=1)
         else:
             # alter generator limits
-            ssp.gen.max_p_mw = ssp_gen['max_sfr']
-            ssp.gen.min_p_mw = ssp_gen['min_sfr']
+            ssp.gen['max_p_mw'] = ssp_gen['max_sfr']
+            ssp.gen['min_p_mw'] = ssp_gen['min_sfr']
+
+        ssp.gen['p_mw'] = ssp_gen['pg'] * ssp.sn_mva
+        ssp.gen.loc[gen_rid, 'max_p_mw'] = ssp.gen['p_mw'].iloc[gen_rid]
+        ssp.gen.loc[gen_rid, 'min_p_mw'] = ssp.gen['p_mw'].iloc[gen_rid]
 
         # --- ACOPF, modify setpoints ---
         # store setpoints
@@ -83,7 +88,7 @@ for end_time in tqdm(range(t_total)):  # t_total
         ac_res['p0'] = p0                  # last setpoints
         ac_res.fillna(False, inplace=True)  # Fill NA wil False
 
-        # reset Generator limtis to normal limits
+        # reset Generator limtis to real limits
         ssp.gen.max_p_mw = ssp_gen0.max_p_mw
         ssp.gen.min_p_mw = ssp_gen0.min_p_mw
 
@@ -180,7 +185,6 @@ for end_time in tqdm(range(t_total)):  # t_total
                    value=ssa_p0 * load_exp)
         ssa.PQ.set(src='q0', idx=ssa_pq_idx, attr='v',
                    value=ssa_q0 * load_exp)
-        ssa.PFlow.run()
     else:
         ssa.PQ.set(src='Ppf', idx=ssa_pq_idx, attr='v',
                    value=ssa_p0 * d_syn['sload'].iloc[end_time])
@@ -200,6 +204,7 @@ for end_time in tqdm(range(t_total)):  # t_total
 
     # run TDS
     if end_time == 0:
+        ssa.PFlow.run()
         ssa.TDS.init()
     else:
         ssa.TDS.config.tf = end_time

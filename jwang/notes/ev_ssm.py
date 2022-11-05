@@ -799,6 +799,7 @@ class ev_ssm():
                                      ignore_index=True)
                 self.tsd.iloc[-1, 1] = Pi  # col 'Pr'
                 self.n_step += 1
+            # self.ict()
 
     def g_A(self, is_update=False):
         """

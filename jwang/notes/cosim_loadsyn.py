@@ -28,12 +28,13 @@ elif case_name == 'npcc':
     k = 0.005
     k2 = 0.0
     kr = 10
+    kt = 0.1
     d_syn['s10'] = d_syn['h10'] + k * d_syn['a10']
     d_syn['s18'] = d_syn['h18'] + k * d_syn['a18']
     d_syn['sload'] = d_syn['s18']
     d_syn['sload'] = d_syn['sload'].rolling(kr).mean()
-    d_syn['sload'] *= 0.8 
-    d_syn['sload'] += 0.3
+    d_syn['sload'] *= kt
+    d_syn['sload'] += 1 - kt
 
 # calculate expected load
 step = 300
@@ -48,6 +49,7 @@ if case_name == 'ieee39':
 elif case_name == 'npcc':
     d_syn['sload'].iloc[1:10] = None
     d_syn['sload'].interpolate(method='linear', inplace=True)
+    d_syn.loc[1:10, 'sload'] = d_syn['sload'].iloc[0]
 
 # --- plot load curve ---
 fig_load, ax_load = plt.subplots(figsize=(5, 4))
