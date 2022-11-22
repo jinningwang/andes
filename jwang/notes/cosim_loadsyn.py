@@ -25,7 +25,7 @@ if case_name == 'ieee39':
     d_syn['sload'].iloc[0:300] -= 0.2 * k
     d_syn.loc[500:1200, 'sload'] = d_syn['sload'].iloc[500:1200].rolling(10).mean()
 elif case_name == 'npcc':
-    k = 0.005
+    k = 0.0
     k2 = 0.0
     kr = 10
     kt = 0.1
@@ -35,6 +35,7 @@ elif case_name == 'npcc':
     d_syn['sload'] = d_syn['sload'].rolling(kr).mean()
     d_syn['sload'] *= kt
     d_syn['sload'] += 1 - kt
+    d_syn['sload'] = 1
 
 # calculate expected load
 step = 300

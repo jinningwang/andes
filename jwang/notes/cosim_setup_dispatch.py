@@ -191,6 +191,8 @@ intv_ed = 300  # RTED interval, 300s
 intv_agc = 4    # AGC interval, 4s
 intv_pq = 1     # PQ interval, 1s; alter load and AGC
 intv_step = 50  # step change interval; smooth the setpoitns
+if case_name == 'npcc':
+    intv_step = 100
 
 # number of each interval
 n_ed = int(t_total/intv_ed)
