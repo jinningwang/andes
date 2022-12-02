@@ -8,6 +8,7 @@ elif case_name == 'ieee39':
     ssp_tol = 1e-3
     opf_alt = 1
 
+ev_idx = ssa.DG.find_idx(keys='gen', values=[ev_gen])
 ssa.PV.set(src='p0', idx=ev_gen, attr='v', value=30 / ssa.config.mva)
 ssa.PV.set(src='pmax', idx=ev_gen, attr='v', value=99999 / ssa.config.mva)
 ssa.PV.set(src='pmin', idx=ev_gen, attr='v', value=-99999 / ssa.config.mva)

@@ -8,6 +8,7 @@ ssp.gen['p_mw'][ssp.gen.name == ev_gen] = sse.data["Ptc"]
 ssd.gen['p0'][ssd.gen.idx == ev_gen] = sse.data["Ptc"] / ssd.mva
 ssa.StaticGen.set(src='p0', attr='v', idx=ev_gen, value=sse.data["Ptc"] / ssa.config.mva)
 
+ev_pagc0 = 0
 for end_time in tqdm(range(t_total)):  # t_total
     # --- interval RTED ---
     if end_time % intv_ed == 0:
@@ -119,16 +120,30 @@ for end_time in tqdm(range(t_total)):  # t_total
 
         # --- record AGC ---
         if end_time > 0:
-            gref = ssa.TurbineGov.get(src='pref', attr='v', idx=agc_gov_idx)
-            gout = ssa.TurbineGov.get(src='pout', attr='v', idx=agc_gov_idx)
-            tmp_df = pd.DataFrame()
-            tmp_df['gov_idx'] = agc_gov_idx
-            tmp_df[end_time] = gout - gref
-            tmp_df2 = tmp_df.merge(right=agc_table,
-                                on='gov_idx', how='right')
-            tmp_df3 = tmp_df2[['stg_idx', end_time]].merge(right=ssa_key2,
-                                    on='stg_idx', how='right')
-            agc_out[end_time] = tmp_df3[end_time]
+            # SynGen AGC power
+            sg_pref = ssa.TurbineGov.get(src='pref', attr='v', idx=agc_gov_idx)
+            sg_pout = ssa.TurbineGov.get(src='pout', attr='v', idx=agc_gov_idx)
+            sga_df = pd.DataFrame()
+            sga_df['gov_idx'] = agc_gov_idx
+            sga_df[end_time] = sg_pout - sg_pref
+
+            # DG AGC power
+            dg_pref = ssa.DG.get(src='Pref', attr='v', idx=ev_idx)
+            dg_iout = ssa.DG.get(src='Ipout_y', attr='v', idx=ev_idx)
+            dg_v = ssa.DG.get(src='v', attr='v', idx=ev_idx)
+            dg_pout = dg_iout * dg_v
+            dga_df = pd.DataFrame()
+            dga_df['dg_idx'] = ev_idx
+            dga_df[end_time] = dg_pout - dg_pref
+            # NOTE: for this study, hard code the AGC power of EV
+            dga_df[end_time] = sse.data['Prc'] / ssa.config.mva
+
+            # Merge
+            tmp_df = pd.merge(left=agc_table, right=sga_df,
+                            on='gov_idx', how='left')
+            tmp_df = pd.merge(left=tmp_df, right=dga_df,
+                            on='dg_idx', how='left')
+            agc_out[end_time] = tmp_df[f'{end_time}_x'].fillna(0) + tmp_df[f'{end_time}_y'].fillna(0)
 
         # --- assign AGC ---
         # a.SynGen
