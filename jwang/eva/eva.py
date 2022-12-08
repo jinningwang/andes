@@ -1,12 +1,12 @@
 import itertools
+import sys
+import time
+from collections import OrderedDict
 from tqdm import tqdm
 import pandas as pd
 import numpy as np
 import scipy.stats as stats
 import matplotlib.pyplot as plt
-from collections import OrderedDict
-import sys
-import time
 
 import pprint
 import io
@@ -125,7 +125,7 @@ class EVStation():
         Tagc: float
             AGC time period in second
         socf: float
-            SOC level that will be switched to force charging 
+            SOC level that will be switched to force charging
         seed: int
             random seed
         r: float
@@ -169,7 +169,7 @@ class EVStation():
                        'soci', 'socd', 'Pc', 'Pd',
                        'nc', 'nd', 'Q'],
                  'd': ['u', 'u0', 'soc', 'c', 'lc', 'sx',
-                       'na', 'ama', 'dP', 'agc', 'mod']}
+                       'na', 'ama', 'agc', 'mod']}
         sdata = pd.DataFrame()  # static data
         sdata['idx'] = [i for i in range(self.config.N)]
         sdata[[dcols['s']]] = -2.0
@@ -179,7 +179,10 @@ class EVStation():
 
         # --- initialize MCS ---
         # add current timestamp `t` to config
-        mcs_config = {**{'t': 0.0, 'tf': 0.0}, **mcs_config}
+        mcs_config = {**{'t': 0.0, 'tf': 0.0, 'socf': self.config.socf,
+                         'agc': self.config.agc,
+                         'ict': self.config.ict},
+                      **mcs_config}
         # put data into MCS
         self.MCS = MCS(config=mcs_config, sdata=sdata, ddata=ddata)
 
@@ -303,7 +306,6 @@ class EVStation():
         datad['c'] = 0.0
         mask_c = datad[(datad['soc'] < datas['socd']) & datad['u'] > 0].index
         datad.loc[mask_c, 'c'] = 1.0
-        datad['dP'] = 0.0  # delta power
 
         # --- 6. initialize other parameters ---
         datad['agc'] = 0.0
@@ -411,18 +413,21 @@ class MCS():
         """
         self.config = DictAttr(config)
 
-        # declear data frame
+        # declear DataFrame for time series data
         ts = pd.DataFrame()
         # time in seconds
         ts['t'] = np.arange(0,
-                            self.config.th * 3600 + self.config.h,
+                            self.config.th * 3600 + 0.1,
                             self.config.h)
-        # TODO: add other columns used in MCS
+        cols = ['Pi', 'Pr', 'Prc',
+                'Pt', 'Ptc']
+        ts[cols] = -2.0
         self.data = EVData(s=sdata, d=ddata, ts=ts)
 
-        # --- declear progress var ---
-        self.last_pc = 0
-        self.perc = 0
+        # --- declear info dict ---
+        info = {'t': self.config.t, 'Pi': 0.0,
+                'Prc': 0.0, 'Ptc': 0.0}
+        self.info = DictAttr(info)
 
     def __repr__(self) -> str:
         # TODO; any other info?
@@ -442,24 +447,48 @@ class MCS():
         datad: pd.DataFrame
             EV dynamic data.
         """
-        pbar = tqdm(total=100, unit='%', file=sys.stdout,
-                    disable=self.config.no_tqdm)
+        # TODO: extend variable if self.config.tf > self.config.th * self.config.h
+        # --- variable ---
+        datas = self.data.s
+        datad = self.data.d
         t0 = self.config.t  # start time of this run
         resume = t0 > 0  # resume flag, true means not start from zero
         perc_t = 0  # total percentage
         perc_add = 0  # incremental percentage
+        pbar = tqdm(total=100, unit='%', file=sys.stdout,
+                    disable=self.config.no_tqdm)
         # --- loop ---
-        #NOTE: self.config.t < self.config.tf
+        # NOTE: self.config.t < self.config.tf
         while perc_t < 100.0:
-            # --- update timestamp ---
+            # --- computation ---
+            # --- 1. update timestamp ---
             self.config.t += self.config.h
-            # --- update EV online status ---
+
+            # --- 2. update EV online status ---
             self.g_u()
-            # --- update control ---
-            pass
-            # --- update EV dynamic data ---
-            pass
-            # --- update progress bar ---
+
+            # --- 3. update control ---
+            self.g_c()
+            # --- 4. update EV dynamic data ---
+            # --- 4.1 update soc interval and online status ---
+            # charging/discharging power, kW
+            datad['soc'] += datad['c'] * datas['nc'] * datas['Pc'] \
+                / datas['Q'] * self.config.h / 3600
+            # --- 4.2 modify outranged SoC ---
+            masku = datad[datad['soc'] >= 1.0].index
+            maskl = datad[datad['soc'] <= 0.0].index
+            datad.loc[masku, 'soc'] = 1.0
+            datad.loc[maskl, 'soc'] = 0.0
+
+            # --- log info ---
+            # --- 1. update info dict ---
+            Ptc = 0  # total charging power, kW
+            # TODO: other vars
+            info = {'t': self.config.t,
+                    'Pi': 0.0, 'Prc': 0.0,
+                    'Ptc': Ptc}
+            self.info = DictAttr(info)
+           # --- 2. update progress bar ---
             if resume:
                 perc = 100 * self.config.h / (self.config.tf - t0)
                 perc_add = 100 * t0 / self.config.tf
@@ -474,6 +503,48 @@ class MCS():
             perc_t += perc_update
 
         pbar.close()
+        return True
+
+    def g_c(self, Pi=0, is_test=False) -> bool:
+        """
+        Generate EV control signal.
+        EV start to charge with rated power as soon as it plugs in.
+        The process will not be interrupted until receive control signal
+        or achieved demanmded SoC level.
+
+
+        Test mode is used to build SSM A.
+
+        Parameters
+        ----------
+        is_test: bool
+            `True` to turn on test mode.
+            test mode: TBD
+        """
+        # --- variable pointer ---
+        datas = self.data.s
+        datad = self.data.d
+        if is_test:
+            # --- test mode ---
+            # TODO: add test mode
+            return True
+        if False:  # deadband
+            # TODO: if control not zero, response to control signal
+            # NOTE: from EVC
+            pass
+        else:
+            # --- revise control if no signal ---
+            # `CS` for low charged EVs, and set 'lc' to 1
+            mask_lc = datad[(datad['soc'] <= self.config.socf) & (datad['u']) >= 1.0].index
+            datad.loc[mask_lc, ['lc', 'c']] = 1.0
+            datad.loc[mask_lc, 'mod'] = 1.0
+            # `IS` for full EVs
+            mask_full = datad[(datad['soc'] >= datas['socd'])].index
+            datad.loc[mask_full, 'c'] = 0.0
+            # `IS` for offline EVs
+            datad['c'] = datad['c'] * datad['u']
+        # TODO: is this necessary? reformatted control signal c2
+        # self.ev['c2'] = self.ev['c'].replace({1: 0, 0: 1, -1: 2})
         return True
 
     def g_u(self) -> bool:
