@@ -172,10 +172,10 @@ class EVStation():
                        'na', 'ama', 'agc', 'mod']}
         sdata = pd.DataFrame()  # static data
         sdata['idx'] = [i for i in range(self.config.N)]
-        sdata[[dcols['s']]] = -2.0
+        sdata[[dcols['s']]] = np.nan
         ddata = pd.DataFrame()  # dynamic data
         ddata['idx'] = sdata['idx']
-        ddata[[dcols['d']]] = -2.0
+        ddata[[dcols['d']]] = np.nan
 
         # --- initialize MCS ---
         # add current timestamp `t` to config
@@ -360,6 +360,9 @@ class EVStation():
         cond2 = datad['soc'] <= self.config.socf  # force charging SOC level
         datad.loc[cond2, 'lc'] = 1.0
 
+        # --- 10. initialize MCS data ---
+        self.MCS.g_ts()
+
         # --- 10. data dict ---
         # TODO: how to organize?
 
@@ -419,15 +422,30 @@ class MCS():
         ts['t'] = np.arange(0,
                             self.config.th * 3600 + 0.1,
                             self.config.h)
-        cols = ['Pi', 'Pr', 'Prc',
-                'Pt', 'Ptc']
-        ts[cols] = -2.0
+        cols = ['Pi', 'Prc', 'Ptc']
+        ts[cols] = np.nan
         self.data = EVData(s=sdata, d=ddata, ts=ts)
 
         # --- declear info dict ---
-        info = {'t': self.config.t, 'Pi': 0.0,
-                'Prc': 0.0, 'Ptc': 0.0}
+        info = {'t': self.config.t, 'Pi': 0,
+                'Prc': 0.0, 'Ptc': 0}
         self.info = DictAttr(info)
+
+    def g_ts(self) -> True:
+        """Update info into time series data"""
+        datas = self.data.s
+        datad = self.data.d
+        # NOTE: `Ptc`, `Prc`, are converted from kW to MW, seen from the grid
+        Prc = datad['agc'] * datad['u'] * datas['Pc'] * datas['nc']
+        Ptc = datad['c'] * datad['u'] * datas['Pc'] * datas['nc']
+        info = {'t': self.config.t, 'Pi': 0,
+                'Prc': -1 * Prc.sum() * 1e-3,
+                'Ptc': -1 * Ptc.sum() * 1e-3}
+        self.info = DictAttr(info)
+        datats = self.data.ts
+        # TODO: this might be slow and wrong
+        rid = datats[datats['t'] >= info['t']].index[0]
+        datats.loc[rid, info.keys()] = info.values()
 
     def __repr__(self) -> str:
         # TODO; any other info?
@@ -458,8 +476,7 @@ class MCS():
         pbar = tqdm(total=100, unit='%', file=sys.stdout,
                     disable=self.config.no_tqdm)
         # --- loop ---
-        # NOTE: self.config.t < self.config.tf
-        while perc_t < 100.0:
+        while self.config.t < self.config.tf:
             # --- computation ---
             # --- 1. update timestamp ---
             self.config.t += self.config.h
@@ -481,13 +498,7 @@ class MCS():
             datad.loc[maskl, 'soc'] = 0.0
 
             # --- log info ---
-            # --- 1. update info dict ---
-            Ptc = 0  # total charging power, kW
-            # TODO: other vars
-            info = {'t': self.config.t,
-                    'Pi': 0.0, 'Prc': 0.0,
-                    'Ptc': Ptc}
-            self.info = DictAttr(info)
+            self.g_ts()
            # --- 2. update progress bar ---
             if resume:
                 perc = 100 * self.config.h / (self.config.tf - t0)
