@@ -409,8 +409,10 @@ class MCS():
         ----------
         config: dict
             Monte-Carlo simulation configuration.
-        data: EVData
-            Data for Monte-Carlo simulation.
+        sdata: pd.DataFrame
+            Static data
+        ddata: pd.DataFrame
+            Dynamic data
 
         config
         ------
