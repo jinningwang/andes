@@ -83,20 +83,52 @@ class EVData():
             Static data.
         d: pd.DataFrame
             Dynamic data.
+        ts: pd.DataFrame
+            Time series data.
         """
         self.s = s
         self.d = d
         self.ts = ts
 
     def __repr__(self) -> str:
-        info = f'EVData: {self.s.shape[0]} EVs'
-        return pprint.pformat(info)
+        ss = _check_mem(self.s)
+        sd = _check_mem(self.d)
+        st = _check_mem(self.ts)
+        info = f'EVData: {self.s.shape[0]} EVs, Sdata: '+ss + ', Ddata: '+sd+', Tdata: '+st
+        return info
+
+
+def _check_mem(df):
+    """Check memory usage of a dataframe"""
+    buffer = io.StringIO()
+    with redirect_stdout(buffer):
+        df.info(verbose=False, memory_usage=True, buf=buffer)
+    s = buffer.getvalue()
+    mem_use = s.split(' ')[-2] + ' ' + s.split(' ')[-1].strip('\n')
+    return mem_use
 
 
 class EVStation():
     """
     EV Station class to hold EV data, control EV status, and collecte EV info.
     """
+
+    def ctype(self):
+        """Change data type"""
+        ddata = self.MCS.data.d
+        sdata = self.MCS.data.s
+        ts = self.MCS.data.ts
+        dcols = {'s': ['ts', 'tf', 'tt', 'soc0', 'na0',
+                       'soci', 'socd', 'Pc', 'Pd',
+                       'nc', 'nd', 'Q'],
+                 'd': ['u', 'u0', 'soc', 'c', 'lc', 'sx',
+                       'na', 'ama', 'agc', 'mod']}
+        sdata['idx'] = sdata['idx'].astype('int32')
+        sdata[dcols['s']] = sdata[dcols['s']].astype('float32')
+        ddata['idx'] = ddata['idx'].astype('int32')
+        ddata[dcols['d']] = ddata[dcols['d']].astype('float32')
+        ts = ts.astype('float32')
+        return True
 
     def __init__(self,
                  config, mcs_config,
@@ -240,22 +272,7 @@ class EVStation():
         datas['ts'] = tp['ts']
         datas['tf'] = tp['tf']
 
-        def _check_mem(df):
-            """Check memory usage of a dataframe"""
-            buffer = io.StringIO()
-            with redirect_stdout(buffer):
-                df.info(verbose=False, memory_usage=True, buf=buffer)
-            s = buffer.getvalue()
-            mem_use = s.split(' ')[-2] + ' ' + s.split(' ')[-1].strip('\n')
-            return mem_use
-
         # --- memory save settings ---
-        # --- check memory usage ---
-        sd0 = _check_mem(datad)
-        ss0 = _check_mem(datas)
-        info_mem = f'{self.name} Memory usage:\n'\
-            f'Static data: {ss0}, Dynamic data: {sd0}\n'
-        info_mem_save = ''
         if self.config.memory_save:
             # TODO: mask is not correct
             mask_u = datas[(datas['ts'] > self.MCS.config.ts + self.MCS.config.th)
@@ -267,14 +284,10 @@ class EVStation():
             datas.reset_index(drop=True, inplace=True)
             datad['idx'] = range(len(datad))
             datas['idx'] = datad['idx']
-            # --- check memory usage ---
-            sd1 = _check_mem(datad)
-            ss1 = _check_mem(datas)
             # --- info ---
             info_mem_save = f'Memory save is turned on, EVs out of time range '\
-                f'[{self.MCS.config.ts}, {self.MCS.config.ts + self.MCS.config.th}] are dropped. \n'\
-                f'Static data: {ss1}, Dynamic data: {sd1}'
-        logger.warning(info_mem + info_mem_save)
+                f'[{self.MCS.config.ts}, {self.MCS.config.ts + self.MCS.config.th}] are dropped.'
+        logger.warning(info_mem_save)
 
         # --- 3. online status ---
         self.MCS.g_u()
@@ -362,9 +375,11 @@ class EVStation():
 
         # --- 10. initialize MCS data ---
         self.MCS.g_ts()
+        self.ctype()
 
-        # --- 10. data dict ---
+        # --- 11. data dict ---
         # TODO: how to organize?
+        # NOTE: include MCS info and online EV info
 
         # --- report info ---
         init_info = f'{self.name}: Initialized successfully with:\n'\
@@ -424,6 +439,7 @@ class MCS():
                             self.config.h)
         cols = ['Pi', 'Prc', 'Ptc']
         ts[cols] = np.nan
+        ts = ts.astype('float32')
         self.data = EVData(s=sdata, d=ddata, ts=ts)
 
         # --- declear info dict ---
@@ -457,13 +473,6 @@ class MCS():
     def run(self) -> bool:
         """
         Run Monte-Carlo simulation
-
-        Parameters
-        ----------
-        datas: pd.DataFrame
-            EV static data.
-        datad: pd.DataFrame
-            EV dynamic data.
         """
         # TODO: extend variable if self.config.tf > self.config.th * self.config.h
         # --- variable ---
@@ -514,9 +523,10 @@ class MCS():
             perc_t += perc_update
 
         pbar.close()
+        # TODO: exit_code
         return True
 
-    def g_c(self, Pi=0, is_test=False) -> bool:
+    def g_c(self, cvec=None, is_test=False) -> bool:
         """
         Generate EV control signal.
         EV start to charge with rated power as soon as it plugs in.
@@ -528,6 +538,8 @@ class MCS():
 
         Parameters
         ----------
+        cvec: np.array
+            EV control vector from EVCenter
         is_test: bool
             `True` to turn on test mode.
             test mode: TBD
@@ -539,11 +551,7 @@ class MCS():
             # --- test mode ---
             # TODO: add test mode
             return True
-        if False:  # deadband
-            # TODO: if control not zero, response to control signal
-            # NOTE: from EVC
-            pass
-        else:
+        if not cvec:
             # --- revise control if no signal ---
             # `CS` for low charged EVs, and set 'lc' to 1
             mask_lc = datad[(datad['soc'] <= self.config.socf) & (datad['u']) >= 1.0].index
@@ -554,6 +562,11 @@ class MCS():
             datad.loc[mask_full, 'c'] = 0.0
             # `IS` for offline EVs
             datad['c'] = datad['c'] * datad['u']
+        else:
+            # --- response with control vector ---
+            # TODO: if control not zero, response to control signal
+            # NOTE: from EVC
+            pass
         # TODO: is this necessary? reformatted control signal c2
         # self.ev['c2'] = self.ev['c'].replace({1: 0, 0: 1, -1: 2})
         return True
