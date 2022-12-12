@@ -195,22 +195,22 @@ class EVStation():
     EV Station class to hold EV data, control EV status, and collecte EV info.
     """
 
-    def ctype(self):
-        """Change data type"""
-        ddata = self.MCS.data.d
-        sdata = self.MCS.data.s
-        ts = self.MCS.data.ts
-        dcols = {'s': ['ts', 'tf', 'tt', 'soc0', 'na0',
-                       'soci', 'socd', 'Pc', 'Pd',
-                       'nc', 'nd', 'Q'],
-                 'd': ['u', 'u0', 'soc', 'c', 'lc', 'sx',
-                       'na', 'ama', 'agc', 'mod']}
-        sdata['idx'] = sdata['idx'].astype('int32')
-        sdata[dcols['s']] = sdata[dcols['s']].astype('float32')
-        ddata['idx'] = ddata['idx'].astype('int32')
-        ddata[dcols['d']] = ddata[dcols['d']].astype('float32')
-        ts = ts.astype('float32')
-        return True
+    # def ctype(self):
+    #     """Change data type"""
+    #     ddata = self.MCS.data.d
+    #     sdata = self.MCS.data.s
+    #     ts = self.MCS.data.ts
+    #     dcols = {'s': ['ts', 'tf', 'tt', 'soc0', 'na0',
+    #                    'soci', 'socd', 'Pc', 'Pd',
+    #                    'nc', 'nd', 'Q'],
+    #              'd': ['u', 'u0', 'soc', 'c', 'lc', 'sx',
+    #                    'na', 'ama', 'agc', 'mod']}
+    #     sdata['idx'] = sdata['idx'].astype('int32')
+    #     sdata[dcols['s']] = sdata[dcols['s']].astype('float32')
+    #     ddata['idx'] = ddata['idx'].astype('int32')
+    #     ddata[dcols['d']] = ddata[dcols['d']].astype('float32')
+    #     ts = ts.astype('float32')
+    #     return True
 
     def __init__(self,
                  config, mcs_config,
