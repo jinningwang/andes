@@ -24,7 +24,7 @@ dir_path = os.path.abspath('..')
 case = dir_path + case_path
 ssa = andes.load(case,
                  setup=False,
-                 no_output=True,
+                 no_output=False,
                  default_config=False)
 
 ssa.add("Output", dict(model='ACEc', varname='ace'))
