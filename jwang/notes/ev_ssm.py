@@ -589,6 +589,7 @@ class ev_ssm():
         return fig_agc, ax_agc
 
     def plot(self, figsize=(6, 3), style='default', tu='s',
+             plt_vars=None, legends=None,
              bbox_to_anchor=(0.85, 0.2), loc='lower right', **kwargs):
         """
         Plot the results.
@@ -611,14 +612,17 @@ class ev_ssm():
         elif tu == 'h':
             x = 'ts'
             xlabel = 'Time [H]'
-        self.tsd.plot(x=x, y=['Ptc', 'Pcc', 'Pdc'],
-                      label=['Total', 'Charging', 'Discharging'],
+        pvars = plt_vars if plt_vars is not None else ['Ptc', 'Pcc', 'Pdc']
+        label_vars = legends if legends is not None else plt_vars
+        self.tsd.plot(x=x, y=pvars,
+                      label=label_vars,
                       ax=ax_ev, legend=False)
-        ax2 = ax_ev.twinx()
-        self.tsd.plot(x=x, y='ne', label='Online EVs',
-                      color='orange', ax=ax2,
-                      legend=False)
-        ax2.set_ylabel('Online EVs')
+        if plt_vars is None:
+            ax2 = ax_ev.twinx()
+            self.tsd.plot(x=x, y='ne', label='Online EVs',
+                        color='orange', ax=ax2,
+                        legend=False)
+            ax2.set_ylabel('Online EVs')
         ax_ev.set_xlabel(xlabel)
         ax_ev.set_ylabel('Power (MW)')
         ax_ev.set_title(f"{self.config['name']}")
