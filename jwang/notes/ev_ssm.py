@@ -724,7 +724,8 @@ class ev_ssm():
 
     def run(self, tf=10, Pi=0,
             is_updateA=False, is_rstate=False,
-            is_test=False, disable=False):
+            is_test=False, disable=False,
+            fail_rate=0):
         """
         Run the ev aggregator from ``ts`` to ``tf``.
 
@@ -769,9 +770,9 @@ class ev_ssm():
                 self.g_u()  # update online status
                 # TODO: add warning when Pi is 0
                 Pi_input += self.config['ecc'] * (self.data['Pet'])  # DEBUG: remove term ` + self.data['Pet']`
-                self.g_c(Pi=Pi_input, is_test=is_test)
+                self.g_c(Pi=Pi_input, fail_rate=fail_rate, is_test=is_test)
                 lc0 = self.ev['lc'].copy()
-                self.g_c(Pi=Pi_input, is_test=is_test)  # update control signal
+                self.g_c(Pi=Pi_input, fail_rate=fail_rate, is_test=is_test)  # update control signal
                 # --- update soc interval and online status ---
                 # charging/discharging power, kW
                 self.ev['dP'] = 0
@@ -856,7 +857,7 @@ class ev_ssm():
         self.ev.drop(['tnow'], axis=1, inplace=True)
         return True
 
-    def g_c(self, Pi=0, is_test=False):
+    def g_c(self, Pi=0, fail_rate=0, is_test=False):
         """
         Generate the charging signal.
         `is_test=True` is recommended for initially building SSM A.
@@ -882,7 +883,7 @@ class ev_ssm():
             pass
         else:
             if self.config['agc'] & (abs(Pi) > self.config['Pdbd']):  # deadband
-                self.r_agc(Pi=Pi)
+                self.r_agc(Pi=Pi, fail_rate=fail_rate)
             else:
                 # --- revise control ---
                 # `CS` for low charged EVs, and set 'lc' to 1
@@ -1105,7 +1106,7 @@ class ev_ssm():
 
         return True
 
-    def r_agc(self, Pi):
+    def r_agc(self, Pi, fail_rate=0):
         """
         Alter `ev.ctrl` based on `us` `vs` from `g_agc` to response AGC; update `x0`
 
@@ -1182,6 +1183,10 @@ class ev_ssm():
             self.ev['p'] = 1.1  # default p
             mask_p = self.ev[cond_ol & cond_nlc].index
             self.ev.loc[mask_p, 'p'] = np.random.uniform(low=0, high=1, size=len(mask_p))
+            # Simulating EVs that do not switch due to communication failures
+            n_fail = int(len(mask_p) * fail_rate)
+            mask_fail = np.random.choice(mask_p, n_fail, replace=False)
+            self.ev.loc[mask_fail, 'p'] = 1.1
             cond_pv = self.ev['p'] <= self.ev['pv']  # prob of EV to vs
             cond_pu = self.ev['p'] <= self.ev['pu']  # prob of EV to us
             cond_d = self.ev['c'] == -1  # EV in DS
