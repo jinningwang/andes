@@ -62,6 +62,10 @@ def m2mpc(infile: str) -> dict:
     area = re.compile(r'\s*mpc.areas\s*=\s*\[')
     gencost = re.compile(r'\s*mpc.gencost\s*=\s*\[')
     bus_name = re.compile(r'\s*mpc.bus_name\s*=\s*{')
+    dcpol = re.compile(r'\s*mpc.dcpol\s*=\s*.*')
+    dcbus = re.compile(r'\s*mpc.dcbus\s*=\s*\[')
+    dcconv = re.compile(r'\s*mpc.dcconv\s*=\s*\[')
+    dcbranch = re.compile(r'\s*mpc.dcbranch\s*=\s*\[')
     end = re.compile(r'\s*\];?')
     has_digit = re.compile(r'.*\d+\s*]?;?')
 
@@ -77,6 +81,10 @@ def m2mpc(infile: str) -> dict:
         'area': [],
         'gencost': [],
         'bus_name': [],
+        'dcpol': -1,  # not in use
+        'dcbus': [],
+        'dcconv': [],
+        'dcbranch': [],
     }
 
     input_list = andes.io.read_file_like(infile)
@@ -95,6 +103,8 @@ def m2mpc(infile: str) -> dict:
                 continue
         elif mva.search(line):
             mpc["baseMVA"] = float(line.split('=')[1])
+        elif dcpol.search(line):
+            mpc["dcpol"] = int(line.split('=')[1])
 
         if not field:
             if bus.search(line):
@@ -109,6 +119,12 @@ def m2mpc(infile: str) -> dict:
                 field = 'gencost'
             elif bus_name.search(line):
                 field = 'bus_name'
+            elif dcbus.search(line):
+                field = 'dcbus'
+            elif dcconv.search(line):
+                field = 'dcconv'
+            elif dcbranch.search(line):
+                field = 'dcbranch'
             else:
                 continue
         elif end.search(line):
@@ -157,6 +173,9 @@ def m2mpc(infile: str) -> dict:
                 mpc_array[key] = np.array(val)
         else:
             raise NotImplementedError("Unkonwn type for mpc, ", type(val))
+
+    if mpc_array['dcpol'] == -1:
+        mpc_array.pop('dcpol')
 
     return mpc_array
 
