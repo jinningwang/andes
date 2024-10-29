@@ -134,6 +134,9 @@ class RLs(DC2Term):
 
 
 class RCp(DC2Term):
+    """
+    RL parallel dc branch
+    """
     def __init__(self, system, config):
         DC2Term.__init__(self, system, config)
         self.flags.pflow = True
@@ -156,7 +159,7 @@ class RCp(DC2Term):
         self.vC = State(tex_name='v_C',
                         info='Capacitor voltage',
                         unit='p.u.',
-                        e_str='-u * (Idc - vC/R)',
+                        e_str='-u * (Idc + vC/R)',
                         v_str='v1 - v2',
                         t_const=self.C,
                         )
