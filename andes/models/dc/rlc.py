@@ -75,7 +75,7 @@ class C(DC2Term):
                           g=True,
                           )
         self.vC = State(tex_name='v_C',
-                        info='Capacitor current',
+                        info='Capacitor voltage',
                         unit='p.u.',
                         v_str='0',
                         e_str='-u * Idc',
@@ -151,7 +151,7 @@ class RCp(DC2Term):
                           g=True,
                           )
         self.vC = State(tex_name='v_C',
-                        info='Capacitor current',
+                        info='Capacitor voltage',
                         unit='p.u.',
                         e_str='-u * (Idc - vC/R)',
                         v_str='v1 - v2',
@@ -204,7 +204,7 @@ class RLCp(DC2Term):
                         t_const=self.L,
                         )
         self.vC = State(tex_name='v_C',
-                        info='Capacitor current',
+                        info='Capacitor voltage',
                         unit='p.u.',
                         e_str='-u * (Idc - vC/R - IL)',
                         v_str='v1 - v2',
@@ -243,7 +243,7 @@ class RCs(DC2Term):
                           g=True,
                           )
         self.vC = State(tex_name='v_C',
-                        info='Capacitor current',
+                        info='Capacitor voltage',
                         unit='p.u.',
                         e_str='-u * Idc',
                         v_str='v1 - v2',
@@ -296,7 +296,7 @@ class RLCs(DC2Term):
                         t_const=self.L,
                         )
         self.vC = State(tex_name='v_C',
-                        info='Capacitor current',
+                        info='Capacitor voltage',
                         unit='p.u.',
                         e_str='u * IL',
                         v_str='v1 - v2',
