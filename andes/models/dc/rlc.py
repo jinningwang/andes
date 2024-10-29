@@ -274,6 +274,9 @@ class RCs(DC2Term):
 
 
 class RLCs(DC2Term):
+    """
+    RLC series dc branch
+    """
     def __init__(self, system, config):
         DC2Term.__init__(self, system, config)
         self.flags.pflow = True
