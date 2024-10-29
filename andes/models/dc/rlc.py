@@ -176,6 +176,9 @@ class RCp(DC2Term):
 
 
 class RLCp(DC2Term):
+    """
+    RLC parallel dc branch
+    """
     def __init__(self, system, config):
         DC2Term.__init__(self, system, config)
         self.flags.pflow = True
