@@ -108,6 +108,70 @@ class BaseService:
         return f'{self.class_name}: {self.owner.class_name}.{self.name}{val_str}'
 
 
+class OBService(BaseService):
+    """
+    A type of observable service that can give time-series data calculated from
+    simulation results, but not used in DAE.
+
+    Parameters
+    ----------
+    name : str
+        Name of the ConstService
+    v_str : str
+        An equation string to calculate the variable value.
+    v_numeric : Callable, optional
+        A callable which returns the value of the ConstService
+    vtype: type, optional, default to float
+        Type of element in the value array in float or complex
+
+    Attributes
+    ----------
+    v : array-like or a scalar
+        ConstService value
+    """
+
+    def __init__(self,
+                 v_str: Optional[str] = None,
+                 vtype: Optional[type] = None,
+                 name: Optional[str] = None,
+                 tex_name: Optional[str] = None,
+                 info: Optional[str] = None,
+                 unit: Optional[str] = None,
+                 ):
+        super().__init__(name=name, vtype=vtype, tex_name=tex_name, info=info,
+                         unit=unit)
+        self.v_str: str = v_str
+
+    @property
+    def n(self):
+        """
+        Return the count of values in ``self.v``.
+
+        Needs to be overloaded if ``v`` of subclasses is not a 1-dimensional
+        array.
+
+        Returns
+        -------
+        int
+            The count of elements in this variable
+        """
+        # override for debug purpose, otherwise run into recursive calling
+        return self.owner.n
+
+    @property
+    def v(self):
+        """
+        Return the value of the observable service.
+
+        Returns
+        -------
+        array-like or a scalar
+            The value of the observable service
+        """
+        # NOTE: do the calculation here
+        pass
+
+
 class ConstService(BaseService):
     """
     A type of Service that stays constant once initialized.
