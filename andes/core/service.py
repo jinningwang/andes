@@ -191,7 +191,7 @@ class ConstService(BaseService):
         An equation string to calculate the variable value.
     v_numeric : Callable, optional
         A callable which returns the value of the ConstService
-    v_type: type, optional, default to float
+    vtype: type, optional, default to float
         Type of element in the value array in float or complex
 
     Attributes
