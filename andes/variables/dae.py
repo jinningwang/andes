@@ -320,7 +320,7 @@ class DAE:
             'i': 'q',  # RHS of external algebraic variables
         }
 
-        self.m, self.n, self.o, self.p, self.q = 0, 0, 0, 0, 0
+        self.m, self.n, self.o, self.p, self.q, self.r = 0, 0, 0, 0, 0, 0
 
         self.x, self.y, self.z = np.array([]), np.array([]), np.array([])
         self.f, self.g = np.array([]), np.array([])  # RHS of equations
@@ -464,6 +464,7 @@ class DAE:
         self.m = 0
         self.n = 0
         self.o = 0
+        self.r = 0  # number of observables
         self.resize_arrays()
         self.clear_ijv()
         self.clear_ts()

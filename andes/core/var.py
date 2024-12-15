@@ -238,6 +238,15 @@ class BaseVar:
         return self.__class__.__name__
 
 
+class Observable(BaseVar):
+    """
+    Observable variable class.
+    """
+
+    e_code = 'g'
+    v_code = 'y'
+
+
 class Algeb(BaseVar):
     """
     Algebraic variable class, an alias of :py:class:`andes.core.var.BaseVar`.

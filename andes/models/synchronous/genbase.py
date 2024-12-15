@@ -1,7 +1,8 @@
 import logging
 
 from andes.core import (ModelData, IdxParam, NumParam, Model, State,
-                        ExtAlgeb, Algeb, ExtParam, ExtService, ConstService)
+                        ExtAlgeb, Algeb, ExtParam, ExtService, ConstService,
+                        Observable)
 from andes.core.service import InitChecker
 
 logger = logging.getLogger(__name__)
@@ -250,6 +251,9 @@ class GENBase(Model):
                         info='reactive power injection',
                         e_str='u * (vq * Id - vd * Iq) - Qe',
                         v_str='u * (vq0 * Id0 - vd0 * Iq0)')
+        self.Po = Observable(tex_name='P_e',
+                             info='active power injection',
+                             v_str='u * (vd0 * Id0 + vq0 * Iq0)')
 
     def v_numeric(self, **kwargs):
         """
