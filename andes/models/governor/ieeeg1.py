@@ -320,17 +320,6 @@ class IEEEG1PWData(IEEEG1Data):
     def __init__(self):
         IEEEG1Data.__init__(self)
 
-        self.dbL2 = NumParam(info='Lower bound of unintentional deadband',
-                             tex_name='db_{L2}',
-                             default=0.0,
-                             unit='p.u.',
-                             )
-        self.dbU2 = NumParam(info='Upper bound of unintentional deadband',
-                             tex_name='db_{U2}',
-                             default=0.0,
-                             unit='p.u.',
-                             )
-
         self.Gv1 = NumParam(info='Gate value-steam flow pair (point 1), gate value',
                             tex_name='G_{v1}',
                             default=0.0,
@@ -397,16 +386,15 @@ class IEEEG1PWModel(IEEEG1Model):
     def __init__(self, system, config):
         IEEEG1Model.__init__(self, system, config)
 
-        # NOTE: this deadband is named as `DB2` in case in the future
-        # we add an input deadband `DB1`
-        self.DB2 = DeadBand1(u=self.IAW_y, center=0.0,
-                             lower=self.dbL2, upper=self.dbU2,
-                             info='Unintentional deadband',
-                             )
-
-        self.GP = Piecewise(self.DB2_y,
+        self.GP = Piecewise(self.IAW_y,
                             points=('Gv1', 'Gv2', 'Gv3', 'Gv4', 'Gv5', 'Gv6'),
-                            funs=('Pgv1', 'Pgv2', 'Pgv3', 'Pgv4', 'Pgv5', 'Pgv6'),
+                            funs=('Pgv1',
+                                  'Pgv2',
+                                  'Pgv3',
+                                  'Pgv4',
+                                  'Pgv5',
+                                  'Pgv6',
+                                  1),
                             tex_name='G_{P}',
                             info='Non-linear gain of gate value-steam flow',
                             )
