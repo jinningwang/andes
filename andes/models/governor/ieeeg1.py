@@ -376,10 +376,10 @@ class IEEEG1PWModel(IEEEG1Model):
                                   '(vpp - Gv6) * Kgp6 + Pgv6p',
                                   '1'),
                             tex_name='G_{P}',
-                            info='Non-linear gain of gate value-steam flow',
+                            info='normalized steam flow',
                             )
 
-        self.vp = Algeb(info='nominal valve position',
+        self.vp = Algeb(info='nominal steam flow',
                         tex_name='v_{p}',
                         v_str='tm012',
                         e_str='GP_y * (PMAX - PMIN) + PMIN - vp',
