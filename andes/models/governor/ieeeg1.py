@@ -359,15 +359,11 @@ class IEEEG1PWModel(IEEEG1Model):
                 info=f'normalized Pgv{i}',
                 tex_name=f'P_{{gv{i}p}}',
             ))
-        self.PMINp = ConstService(v_str='(PMIN - PMIN) / (PMAX - PMIN)',
-                                  info='normalized PMIN',
-                                  tex_name='P_{MINp}',
-                                  )
 
         self.GP = Piecewise(u=self.vpp,
                             points=(0, 'Gv1', 'Gv2', 'Gv3', 'Gv4', 'Gv5', 'Gv6'),
                             funs=(0,
-                                  '(vpp - 0) * Kgp1 + PMINp',
+                                  '(vpp - 0) * Kgp1',
                                   '(vpp - Gv1) * Kgp2 + Pgv1p',
                                   '(vpp - Gv2) * Kgp3 + Pgv2p',
                                   '(vpp - Gv3) * Kgp4 + Pgv3p',
