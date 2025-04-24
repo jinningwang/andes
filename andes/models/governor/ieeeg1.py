@@ -2,7 +2,7 @@ import numpy as np
 
 from andes.core import (Algeb, ConstService, ExtAlgeb, ExtParam, ExtService,
                         HardLimiter, IdxParam, Lag, LeadLag, NumParam,)
-from andes.core.block import IntegratorAntiWindup, DeadBand1, Piecewise
+from andes.core.block import IntegratorAntiWindup, Piecewise
 from andes.core.service import (FlagValue, InitChecker, NumSelect, ParamCalc,
                                 PostInitService,)
 from andes.models.governor.tgbase import TGBase, TGBaseData
@@ -324,6 +324,7 @@ class IEEEG1PWData(IEEEG1Data):
                             tex_name='G_{v1}',
                             default=0.0,
                             unit='p.u.',
+                            vrange=(0, 1),
                             )
         self.Pgv1 = NumParam(info='Gate value-steam flow pair (point 1), steam flow',
                              tex_name='P_{gv1}',
@@ -334,6 +335,7 @@ class IEEEG1PWData(IEEEG1Data):
                             tex_name='G_{v2}',
                             default=0.2,
                             unit='p.u.',
+                            vrange=(0, 1),
                             )
         self.Pgv2 = NumParam(info='Gate value-steam flow pair (point 2), steam flow',
                              tex_name='P_{gv2}',
@@ -344,6 +346,7 @@ class IEEEG1PWData(IEEEG1Data):
                             tex_name='G_{v3}',
                             default=0.4,
                             unit='p.u.',
+                            vrange=(0, 1),
                             )
         self.Pgv3 = NumParam(info='Gate value-steam flow pair (point 3), steam flow',
                              tex_name='P_{gv3}',
@@ -354,6 +357,7 @@ class IEEEG1PWData(IEEEG1Data):
                             tex_name='G_{v4}',
                             default=0.6,
                             unit='p.u.',
+                            vrange=(0, 1),
                             )
         self.Pgv4 = NumParam(info='Gate value-steam flow pair (point 4), steam flow',
                              tex_name='P_{gv4}',
@@ -364,6 +368,7 @@ class IEEEG1PWData(IEEEG1Data):
                             tex_name='G_{v5}',
                             default=0.8,
                             unit='p.u.',
+                            vrange=(0, 1),
                             )
         self.Pgv5 = NumParam(info='Gate value-steam flow pair (point 5), steam flow',
                              tex_name='P_{gv5}',
@@ -374,6 +379,7 @@ class IEEEG1PWData(IEEEG1Data):
                             tex_name='G_{v6}',
                             default=1.0,
                             unit='p.u.',
+                            vrange=(0, 1),
                             )
         self.Pgv6 = NumParam(info='Gate value-steam flow pair (point 6), steam flow',
                              tex_name='P_{gv6}',
