@@ -320,108 +320,94 @@ class IEEEG1PWData(IEEEG1Data):
     def __init__(self):
         IEEEG1Data.__init__(self)
 
-        self.Gv1 = NumParam(info='Gate value-steam flow pair (point 1), gate value',
-                            tex_name='G_{v1}',
-                            vrange=(0, 1),
-                            default=(1 - 0) * 1 / 7,
-                            )
-        self.Pgv1 = NumParam(info='Gate value-steam flow pair (point 1), steam flow',
-                             tex_name='P_{gv1}', unit='p.u.', power=True,
-                             default=(self.PMAX.default - self.PMIN.default) * 1 / 7,
-                             )
-        self.Gv2 = NumParam(info='Gate value-steam flow pair (point 2), gate value',
-                            tex_name='G_{v2}',
-                            vrange=(0, 1),
-                            default=(1 - 0) * 2 / 7,
-                            )
-        self.Pgv2 = NumParam(info='Gate value-steam flow pair (point 2), steam flow',
-                             tex_name='P_{gv2}', unit='p.u.', power=True,
-                             default=(self.PMAX.default - self.PMIN.default) * 2 / 7,
-                             )
-        self.Gv3 = NumParam(info='Gate value-steam flow pair (point 3), gate value',
-                            tex_name='G_{v3}',
-                            vrange=(0, 1),
-                            default=(1 - 0) * 3 / 7,
-                            )
-        self.Pgv3 = NumParam(info='Gate value-steam flow pair (point 3), steam flow',
-                             tex_name='P_{gv3}', unit='p.u.', power=True,
-                             default=(self.PMAX.default - self.PMIN.default) * 3 / 7,
-                             )
-        self.Gv4 = NumParam(info='Gate value-steam flow pair (point 4), gate value',
-                            tex_name='G_{v4}',
-                            vrange=(0, 1),
-                            default=(1 - 0) * 4 / 7,
-                            )
-        self.Pgv4 = NumParam(info='Gate value-steam flow pair (point 4), steam flow',
-                             tex_name='P_{gv4}', unit='p.u.', power=True,
-                             default=(self.PMAX.default - self.PMIN.default) * 4 / 7,
-                             )
-        self.Gv5 = NumParam(info='Gate value-steam flow pair (point 5), gate value',
-                            tex_name='G_{v5}',
-                            vrange=(0, 1),
-                            default=(1 - 0) * 5 / 7,
-                            )
-        self.Pgv5 = NumParam(info='Gate value-steam flow pair (point 5), steam flow',
-                             tex_name='P_{gv5}', unit='p.u.', power=True,
-                             default=(self.PMAX.default - self.PMIN.default) * 5 / 7,
-                             )
-        self.Gv6 = NumParam(info='Gate value-steam flow pair (point 6), gate value',
-                            tex_name='G_{v6}',
-                            vrange=(0, 1),
-                            default=(1 - 0) * 6 / 7,
-                            )
-        self.Pgv6 = NumParam(info='Gate value-steam flow pair (point 6), steam flow',
-                             tex_name='P_{gv6}', unit='p.u.', power=True,
-                             default=(self.PMAX.default - self.PMIN.default) * 6 / 7,
-                             )
+        # Define Gv1-Gv6 and Pgv1-Pgv6
+        for i in range(1, 7):
+            setattr(self, f'Gv{i}', NumParam(
+                info=f'Gate value-steam flow pair (point {i}), nominal gate value',
+                tex_name=f'G_{{v{i}}}',
+                vrange=(0, 1),
+                default=(1 - 0) * i / 7,
+            ))
+            setattr(self, f'Pgv{i}', NumParam(
+                info=f'Gate value-steam flow pair (point {i}), nominal steam flow',
+                tex_name=f'P_{{gv{i}}}',
+                unit='p.u.',
+                vrange=(0, 1),
+                default=(1 - 0) * i / 7,
+            ))
 
 
 class IEEEG1PWModel(IEEEG1Model):
     def __init__(self, system, config):
         IEEEG1Model.__init__(self, system, config)
 
-        self.vpp = Algeb(info='Valve position in percentage',
+        self.vpp = Algeb(info='normalized valve position',
                          tex_name='v_{pp}',
                          v_str='(tm012 - PMIN) / (PMAX - PMIN)',
                          e_str='(IAW_y - PMIN) / (PMAX - PMIN) - vpp',
                          )
 
-        k1 = '(Pgv1 - PMIN) / (Gv1 - 0)'
-        k2 = '(Pgv2 - Pgv1) / (Gv2 - Gv1)'
-        k3 = '(Pgv3 - Pgv2) / (Gv3 - Gv2)'
-        k4 = '(Pgv4 - Pgv3) / (Gv4 - Gv3)'
-        k5 = '(Pgv5 - Pgv4) / (Gv5 - Gv4)'
-        k6 = '(Pgv6 - Pgv5) / (Gv6 - Gv5)'
+        # Define Kgp1-Kgp6 and Pgv1p-Pgv6p. Is this a bad practice?
+        for i in range(1, 7):
+            setattr(self, f'Kgp{i}', ConstService(
+                v_str=f'(Pgv{i} - PMIN) / (Gv{i} - 0)',
+                info=f'Gain of gate value-steam flow pair (point {i})',
+                tex_name=f'K_{{gp{i}}}',
+            ))
+            setattr(self, f'Pgv{i}p', ConstService(
+                v_str=f'(Pgv{i} - PMIN) / (PMAX - PMIN)',
+                info=f'normalized Pgv{i}',
+                tex_name=f'P_{{gv{i}p}}',
+            ))
+        self.PMINp = ConstService(v_str='(PMIN - PMIN) / (PMAX - PMIN)',
+                                  info='normalized PMIN',
+                                  tex_name='P_{MINp}',
+                                  )
+
         self.GP = Piecewise(u=self.vpp,
                             points=(0, 'Gv1', 'Gv2', 'Gv3', 'Gv4', 'Gv5', 'Gv6'),
                             funs=(0,
-                                  f'(vpp - 0) * {k1} + PMIN',
-                                  f'(vpp - Gv1) * {k2} + Pgv1',
-                                  f'(vpp - Gv2) * {k3} + Pgv2',
-                                  f'(vpp - Gv3) * {k4} + Pgv3',
-                                  f'(vpp - Gv4) * {k5} + Pgv4',
-                                  f'(vpp - Gv5) * {k6} + Pgv5',
-                                  f'(vpp - Gv6) * {k6} + Pgv6',
-                                  'PMAX'),
+                                  '(vpp - 0) * Kgp1 + PMINp',
+                                  '(vpp - Gv1) * Kgp2 + Pgv1p',
+                                  '(vpp - Gv2) * Kgp3 + Pgv2p',
+                                  '(vpp - Gv3) * Kgp4 + Pgv3p',
+                                  '(vpp - Gv4) * Kgp5 + Pgv4p',
+                                  '(vpp - Gv5) * Kgp6 + Pgv5p',
+                                  '(vpp - Gv6) * Kgp6 + Pgv6p',
+                                  '1'),
                             tex_name='G_{P}',
                             info='Non-linear gain of gate value-steam flow',
                             )
 
-        self.L4.u = self.GP_y
+        self.vp = Algeb(info='nominal valve position',
+                        tex_name='v_{p}',
+                        v_str='tm012',
+                        e_str='GP_y * (PMAX - PMIN) + PMIN - vp',
+                        )
+
+        self.L4.u = self.vp
 
 
 class IEEEG1PW(IEEEG1):
     """
     IEEE Type 1 Speed-Governing Model in PowerWorld.
 
-    The IEEEG1 implementation in PowerWorld and GE PSLF add an unintentional
-    deadband and non-linear gain to the inlet piping.
+    The IEEEG1 implementation in PowerWorld and GE PSLF models the boiler as a nonlinear
+    process.
 
-    Reference:
+    In ANDES implementation, the nonlinear boiler process `GP` is represented as
+    a piecewise linear function, defined by six points: (Gv1, Pgv1), ..., (Gv6, Pgv6).
+    Note that Gv1-Gv6 and Pgv1-Pgv6 are normalized values between 0 and 1, which may
+    differ from the implementations in PowerWorld and PSLF.
 
-    [1] Powerworld, Governor IEEEG1, IEEEG1D and IEEEG1_GE.
-    Available:
+    If left unspecified, these points will be linearly interpolated between 0 and 1,
+    resulting in a straight line between (0, 0) and (1, 1). In this case, the model
+    behaves like a standard IEEEG1.
 
+    References:
+
+    [1] PowerWorld, Governor IEEEG1, IEEEG1D, and IEEEG1_GE.
+    Available at:
     https://www.powerworld.com/WebHelp/Content/TransientModels_HTML/Governor%20IEEEG1,%20IEEEG1D%20and%20IEEEG1_GE.htm
     """
 
