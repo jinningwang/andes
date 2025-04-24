@@ -387,26 +387,21 @@ class IEEEG1PWModel(IEEEG1Model):
                          )
 
         k1 = '(Pgv1 - PMIN) / (Gv1 - 0)'
-        b1 = 'PMIN'
         k2 = '(Pgv2 - Pgv1) / (Gv2 - Gv1)'
-        b2 = f'Pgv1 - {k2} * Gv1'
         k3 = '(Pgv3 - Pgv2) / (Gv3 - Gv2)'
-        b3 = f'Pgv2 - {k3} * Gv2'
         k4 = '(Pgv4 - Pgv3) / (Gv4 - Gv3)'
-        b4 = f'Pgv3 - {k4} * Gv3'
         k5 = '(Pgv5 - Pgv4) / (Gv5 - Gv4)'
-        b5 = f'Pgv4 - {k5} * Gv4'
         k6 = '(Pgv6 - Pgv5) / (Gv6 - Gv5)'
-        b6 = f'Pgv5 - {k6} * Gv5'
         self.GP = Piecewise(u=self.vpp,
                             points=(0, 'Gv1', 'Gv2', 'Gv3', 'Gv4', 'Gv5', 'Gv6'),
                             funs=(0,
-                                  f'vpp * {k1} + {b1}',
-                                  f'vpp * {k2} + {b2}',
-                                  f'vpp * {k3} + {b3}',
-                                  f'vpp * {k4} + {b4}',
-                                  f'vpp * {k5} + {b5}',
-                                  f'vpp * {k6} + {b6}',
+                                  f'(vpp - 0) * {k1} + PMIN',
+                                  f'(vpp - Gv1) * {k2} + Pgv1',
+                                  f'(vpp - Gv2) * {k3} + Pgv2',
+                                  f'(vpp - Gv3) * {k4} + Pgv3',
+                                  f'(vpp - Gv4) * {k5} + Pgv4',
+                                  f'(vpp - Gv5) * {k6} + Pgv5',
+                                  f'(vpp - Gv6) * {k6} + Pgv6',
                                   'PMAX'),
                             tex_name='G_{P}',
                             info='Non-linear gain of gate value-steam flow',
