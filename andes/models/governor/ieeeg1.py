@@ -322,69 +322,57 @@ class IEEEG1PWData(IEEEG1Data):
 
         self.Gv1 = NumParam(info='Gate value-steam flow pair (point 1), gate value',
                             tex_name='G_{v1}',
-                            default=0.0,
-                            unit='p.u.',
                             vrange=(0, 1),
+                            default=(1 - 0) * 1 / 7,
                             )
         self.Pgv1 = NumParam(info='Gate value-steam flow pair (point 1), steam flow',
-                             tex_name='P_{gv1}',
-                             default=0.0,
-                             unit='p.u.',
+                             tex_name='P_{gv1}', unit='p.u.', power=True,
+                             default=(self.PMAX.default - self.PMIN.default) * 1 / 7,
                              )
         self.Gv2 = NumParam(info='Gate value-steam flow pair (point 2), gate value',
                             tex_name='G_{v2}',
-                            default=0.2,
-                            unit='p.u.',
                             vrange=(0, 1),
+                            default=(1 - 0) * 2 / 7,
                             )
         self.Pgv2 = NumParam(info='Gate value-steam flow pair (point 2), steam flow',
-                             tex_name='P_{gv2}',
-                             default=0.2,
-                             unit='p.u.',
+                             tex_name='P_{gv2}', unit='p.u.', power=True,
+                             default=(self.PMAX.default - self.PMIN.default) * 2 / 7,
                              )
         self.Gv3 = NumParam(info='Gate value-steam flow pair (point 3), gate value',
                             tex_name='G_{v3}',
-                            default=0.4,
-                            unit='p.u.',
                             vrange=(0, 1),
+                            default=(1 - 0) * 3 / 7,
                             )
         self.Pgv3 = NumParam(info='Gate value-steam flow pair (point 3), steam flow',
-                             tex_name='P_{gv3}',
-                             default=0.4,
-                             unit='p.u.',
+                             tex_name='P_{gv3}', unit='p.u.', power=True,
+                             default=(self.PMAX.default - self.PMIN.default) * 3 / 7,
                              )
         self.Gv4 = NumParam(info='Gate value-steam flow pair (point 4), gate value',
                             tex_name='G_{v4}',
-                            default=0.6,
-                            unit='p.u.',
                             vrange=(0, 1),
+                            default=(1 - 0) * 4 / 7,
                             )
         self.Pgv4 = NumParam(info='Gate value-steam flow pair (point 4), steam flow',
-                             tex_name='P_{gv4}',
-                             default=0.6,
-                             unit='p.u.',
+                             tex_name='P_{gv4}', unit='p.u.', power=True,
+                             default=(self.PMAX.default - self.PMIN.default) * 4 / 7,
                              )
         self.Gv5 = NumParam(info='Gate value-steam flow pair (point 5), gate value',
                             tex_name='G_{v5}',
-                            default=0.8,
-                            unit='p.u.',
                             vrange=(0, 1),
+                            default=(1 - 0) * 5 / 7,
                             )
         self.Pgv5 = NumParam(info='Gate value-steam flow pair (point 5), steam flow',
-                             tex_name='P_{gv5}',
-                             default=0.8,
-                             unit='p.u.',
+                             tex_name='P_{gv5}', unit='p.u.', power=True,
+                             default=(self.PMAX.default - self.PMIN.default) * 5 / 7,
                              )
         self.Gv6 = NumParam(info='Gate value-steam flow pair (point 6), gate value',
                             tex_name='G_{v6}',
-                            default=1.0,
-                            unit='p.u.',
                             vrange=(0, 1),
+                            default=(1 - 0) * 6 / 7,
                             )
         self.Pgv6 = NumParam(info='Gate value-steam flow pair (point 6), steam flow',
-                             tex_name='P_{gv6}',
-                             default=1.0,
-                             unit='p.u.',
+                             tex_name='P_{gv6}', unit='p.u.', power=True,
+                             default=(self.PMAX.default - self.PMIN.default) * 6 / 7,
                              )
 
 
@@ -392,15 +380,34 @@ class IEEEG1PWModel(IEEEG1Model):
     def __init__(self, system, config):
         IEEEG1Model.__init__(self, system, config)
 
-        self.GP = Piecewise(self.IAW_y,
-                            points=('Gv1', 'Gv2', 'Gv3', 'Gv4', 'Gv5', 'Gv6'),
-                            funs=('Pgv1',
-                                  'Pgv2',
-                                  'Pgv3',
-                                  'Pgv4',
-                                  'Pgv5',
-                                  'Pgv6',
-                                  1),
+        self.vpp = Algeb(info='Valve position in percentage',
+                         tex_name='v_{pp}',
+                         v_str='(tm012 - PMIN) / (PMAX - PMIN)',
+                         e_str='(IAW_y - PMIN) / (PMAX - PMIN) - vpp',
+                         )
+
+        k1 = '(Pgv1 - PMIN) / (Gv1 - 0)'
+        b1 = 'PMIN'
+        k2 = '(Pgv2 - Pgv1) / (Gv2 - Gv1)'
+        b2 = f'Pgv1 - {k2} * Gv1'
+        k3 = '(Pgv3 - Pgv2) / (Gv3 - Gv2)'
+        b3 = f'Pgv2 - {k3} * Gv2'
+        k4 = '(Pgv4 - Pgv3) / (Gv4 - Gv3)'
+        b4 = f'Pgv3 - {k4} * Gv3'
+        k5 = '(Pgv5 - Pgv4) / (Gv5 - Gv4)'
+        b5 = f'Pgv4 - {k5} * Gv4'
+        k6 = '(Pgv6 - Pgv5) / (Gv6 - Gv5)'
+        b6 = f'Pgv5 - {k6} * Gv5'
+        self.GP = Piecewise(u=self.vpp,
+                            points=(0, 'Gv1', 'Gv2', 'Gv3', 'Gv4', 'Gv5', 'Gv6'),
+                            funs=(0,
+                                  f'vpp * {k1} + {b1}',
+                                  f'vpp * {k2} + {b2}',
+                                  f'vpp * {k3} + {b3}',
+                                  f'vpp * {k4} + {b4}',
+                                  f'vpp * {k5} + {b5}',
+                                  f'vpp * {k6} + {b6}',
+                                  'PMAX'),
                             tex_name='G_{P}',
                             info='Non-linear gain of gate value-steam flow',
                             )
