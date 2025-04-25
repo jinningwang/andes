@@ -2,7 +2,7 @@ import numpy as np
 
 from andes.core import (Algeb, ConstService, ExtAlgeb, ExtParam, ExtService,
                         HardLimiter, IdxParam, Lag, LeadLag, NumParam,)
-from andes.core.block import IntegratorAntiWindup
+from andes.core.block import IntegratorAntiWindup, Piecewise
 from andes.core.service import (FlagValue, InitChecker, NumSelect, ParamCalc,
                                 PostInitService,)
 from andes.models.governor.tgbase import TGBase, TGBaseData
@@ -320,69 +320,63 @@ class IEEEG1PWData(IEEEG1Data):
     def __init__(self):
         IEEEG1Data.__init__(self)
 
-        # # Define Gv1-Gv6 and Pgv1-Pgv6
-        # for i in range(1, 7):
-        #     setattr(self, f'Gv{i}', NumParam(
-        #         info=f'Gate value-steam flow pair (point {i}), nominal gate value',
-        #         tex_name=f'G_{{v{i}}}',
-        #         default=None,
-        #         power=True,
-        #     ))
-        #     setattr(self, f'Pgv{i}', NumParam(
-        #         info=f'Gate value-steam flow pair (point {i}), nominal steam flow',
-        #         tex_name=f'P_{{gv{i}}}',
-        #         unit='p.u.',
-        #         default=None,
-        #         power=True,
-        #     ))
+        # Define Gv1-Gv6 and Pgv1-Pgv6
+        for i in range(1, 7):
+            setattr(self, f'Gv{i}', NumParam(
+                info=f'Gate value-steam flow pair (point {i}), nominal gate value',
+                tex_name=f'G_{{v{i}}}',
+                default=None,
+                power=True,
+            ))
+            setattr(self, f'Pgv{i}', NumParam(
+                info=f'Gate value-steam flow pair (point {i}), nominal steam flow',
+                tex_name=f'P_{{gv{i}}}',
+                unit='p.u.',
+                default=None,
+                power=True,
+            ))
 
 
 class IEEEG1PWModel(IEEEG1Model):
     def __init__(self, system, config):
         IEEEG1Model.__init__(self, system, config)
 
-        # # Define Kgp1-Kgp6 and Pgv1p-Pgv6p. Is this a bad practice?
-        # self.Kgp1 = ConstService(
-        #     v_str='(Pgv1 - PMIN) / (Gv1 - 0)',
-        #     info='Gain of gate value-steam flow pair (point 1)',
-        #     tex_name='K_{gp1}',
-        # )
-        # for i in range(2, 7):
-        #     setattr(self, f'Kgp{i}', ConstService(
-        #         v_str=f'(Pgv{i} - Pgv{i-1}) / (Gv{i} - Gv{i-1})',
-        #         info=f'Gain of gate value-steam flow pair (point {i})',
-        #         tex_name=f'K_{{gp{i}}}',
-        #     ))
+        # Define Kgp1-Kgp6 and Pgv1p-Pgv6p. Is this a bad practice?
+        self.Kgp1 = ConstService(
+            v_str='(Pgv1 - PMIN) / (Gv1 - 0)',
+            info='Gain of gate value-steam flow pair (point 1)',
+            tex_name='K_{gp1}',
+        )
+        for i in range(2, 7):
+            setattr(self, f'Kgp{i}', ConstService(
+                v_str=f'(Pgv{i} - Pgv{i-1}) / (Gv{i} - Gv{i-1})',
+                info=f'Gain of gate value-steam flow pair (point {i})',
+                tex_name=f'K_{{gp{i}}}',
+            ))
 
-        # self.GV = Piecewise(u=self.IAW_y,
-        #                     points=('PMIN', 'Gv1', 'Gv2', 'Gv3', 'Gv4', 'Gv5', 'Gv6'),
-        #                     funs=('PMIN',
-        #                           '(IAW_y - 0) * Kgp1 + 0',
-        #                           '(IAW_y - Gv1) * Kgp2 + Pgv1',
-        #                           '(IAW_y - Gv2) * Kgp3 + Pgv2',
-        #                           '(IAW_y - Gv3) * Kgp4 + Pgv3',
-        #                           '(IAW_y - Gv4) * Kgp5 + Pgv4',
-        #                           '(IAW_y - Gv5) * Kgp6 + Pgv5',
-        #                           '(IAW_y - Gv6) * Kgp6 + Pgv6',
-        #                           'PMAX'),
-        #                     tex_name='G_{V}',
-        #                     info='steam flow',
-        #                     )
-        # self.GV.y.v_iter = self.GV.y.e_str
+        self.GV = Piecewise(u=self.IAW_y,
+                            points=('PMIN', 'Gv1', 'Gv2', 'Gv3', 'Gv4', 'Gv5', 'Gv6'),
+                            funs=('PMIN',
+                                  '(IAW_y - 0) * Kgp1 + 0',
+                                  '(IAW_y - Gv1) * Kgp2 + Pgv1',
+                                  '(IAW_y - Gv2) * Kgp3 + Pgv2',
+                                  '(IAW_y - Gv3) * Kgp4 + Pgv3',
+                                  '(IAW_y - Gv4) * Kgp5 + Pgv4',
+                                  '(IAW_y - Gv5) * Kgp6 + Pgv5',
+                                  '(IAW_y - Gv6) * Kgp6 + Pgv6',
+                                  'PMAX'),
+                            tex_name='G_{V}',
+                            info='steam flow',
+                            )
+        self.GV.y.v_iter = self.GV.y.e_str
 
-        # self.L4.u = self.GV_y
-
-        # NOTE: in the avove implementation, I failed to tune the initialization process
-        # several notes are left here for future reference
-        # 1. When Gv1-Gv6, Pgv1-Pgv6 are linearly given, IEEEG1PW works okay
-        # 2. When they are set as a sqrt function, initialization will have trouble
-        #    the issues are:
-        #    -  L4.u != L4.y, and there is no error message
-        #    -  Cannot find a value for IAW_y makes GV.y.v_iter work
+        self.L4.u = self.GV_y
 
 
 class IEEEG1PW(IEEEG1):
     """
+    UNDER DEVELOPMENT, DO NOT USE!
+
     IEEE Type 1 Speed-Governing Model in PowerWorld.
 
     The IEEEG1 implementation in PowerWorld and GE PSLF models the gate-steam as a nonlinear
@@ -399,6 +393,15 @@ class IEEEG1PW(IEEEG1):
     [1] PowerWorld, Governor IEEEG1, IEEEG1D, and IEEEG1_GE.
     Available at:
     https://www.powerworld.com/WebHelp/Content/TransientModels_HTML/Governor%20IEEEG1,%20IEEEG1D%20and%20IEEEG1_GE.htm
+
+    Developer Notes
+    ----------------
+    In this implementation, the initialization process has not been fully tuned, and several notes
+    are left here for future reference:
+    1. When Gv1-Gv6, Pgv1-Pgv6 are linearly given, IEEEG1PW works as expected.
+    2. When they are set as a nonlinear function (e.g., sqrt), initialization may encounter issues:
+       - L4.u != L4.y, with no error message in TDS.init()
+       - Cannot find a value for IAW_y different from tm012 that satisfies GV.y.v_iter
     """
 
     def __init__(self, system, config):
