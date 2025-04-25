@@ -326,12 +326,14 @@ class IEEEG1PWData(IEEEG1Data):
                 info=f'Gate value-steam flow pair (point {i}), nominal gate value',
                 tex_name=f'G_{{v{i}}}',
                 default=None,
+                power=True,
             ))
             setattr(self, f'Pgv{i}', NumParam(
                 info=f'Gate value-steam flow pair (point {i}), nominal steam flow',
                 tex_name=f'P_{{gv{i}}}',
                 unit='p.u.',
                 default=None,
+                power=True,
             ))
 
 
@@ -353,8 +355,8 @@ class IEEEG1PWModel(IEEEG1Model):
             ))
 
         self.GV = Piecewise(u=self.IAW_y,
-                            points=(0, 'Gv1', 'Gv2', 'Gv3', 'Gv4', 'Gv5', 'Gv6'),
-                            funs=(0,
+                            points=('PMIN', 'Gv1', 'Gv2', 'Gv3', 'Gv4', 'Gv5', 'Gv6'),
+                            funs=('PMIN',
                                   '(IAW_y - 0) * Kgp1 + 0',
                                   '(IAW_y - Gv1) * Kgp2 + Pgv1',
                                   '(IAW_y - Gv2) * Kgp3 + Pgv2',
@@ -362,10 +364,11 @@ class IEEEG1PWModel(IEEEG1Model):
                                   '(IAW_y - Gv4) * Kgp5 + Pgv4',
                                   '(IAW_y - Gv5) * Kgp6 + Pgv5',
                                   '(IAW_y - Gv6) * Kgp6 + Pgv6',
-                                  '1'),
+                                  'PMAX'),
                             tex_name='G_{V}',
                             info='steam flow',
                             )
+        self.GV.y.v_iter = self.GV.y.e_str
 
         self.L4.u = self.GV_y
 
@@ -379,12 +382,9 @@ class IEEEG1PW(IEEEG1):
 
     In ANDES implementation, the nonlinear gate-steam `GV` is represented as
     a piecewise linear function, defined by six points: (Gv1, Pgv1), ..., (Gv6, Pgv6).
-    Note that Gv1-Gv6 and Pgv1-Pgv6 are normalized values between 0 and 1, which may
-    differ from the implementations in PowerWorld and PSLF.
 
-    If left unspecified, these points will be linearly interpolated between 0 and 1,
-    resulting in a straight line between (0, 0) and (1, 1). In this case, the model
-    behaves like a standard IEEEG1.
+    If left unspecified, these points will be linearly interpolated between `PMIN` and `PMAX`,
+    resulting in a straight line.
 
     References:
 
