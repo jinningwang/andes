@@ -325,15 +325,13 @@ class IEEEG1PWData(IEEEG1Data):
             setattr(self, f'Gv{i}', NumParam(
                 info=f'Gate value-steam flow pair (point {i}), nominal gate value',
                 tex_name=f'G_{{v{i}}}',
-                vrange=(0, 1),
-                default=(1 - 0) * i / 7,
+                default=None,
             ))
             setattr(self, f'Pgv{i}', NumParam(
                 info=f'Gate value-steam flow pair (point {i}), nominal steam flow',
                 tex_name=f'P_{{gv{i}}}',
                 unit='p.u.',
-                vrange=(0, 1),
-                default=(1 - 0) * i / 7,
+                default=None,
             ))
 
 
@@ -341,47 +339,35 @@ class IEEEG1PWModel(IEEEG1Model):
     def __init__(self, system, config):
         IEEEG1Model.__init__(self, system, config)
 
-        self.vpp = Algeb(info='normalized valve position',
-                         tex_name='v_{pp}',
-                         v_str='(tm012 - PMIN) / (PMAX - PMIN)',
-                         e_str='(IAW_y - PMIN) / (PMAX - PMIN) - vpp',
-                         )
-
         # Define Kgp1-Kgp6 and Pgv1p-Pgv6p. Is this a bad practice?
-        for i in range(1, 7):
+        self.Kgp1 = ConstService(
+            v_str='(Pgv1 - PMIN) / (Gv1 - 0)',
+            info='Gain of gate value-steam flow pair (point 1)',
+            tex_name='K_{gp1}',
+        )
+        for i in range(2, 7):
             setattr(self, f'Kgp{i}', ConstService(
-                v_str=f'(Pgv{i} - PMIN) / (Gv{i} - 0)',
+                v_str=f'(Pgv{i} - Pgv{i-1}) / (Gv{i} - Gv{i-1})',
                 info=f'Gain of gate value-steam flow pair (point {i})',
                 tex_name=f'K_{{gp{i}}}',
             ))
-            setattr(self, f'Pgv{i}p', ConstService(
-                v_str=f'(Pgv{i} - PMIN) / (PMAX - PMIN)',
-                info=f'normalized Pgv{i}',
-                tex_name=f'P_{{gv{i}p}}',
-            ))
 
-        self.GP = Piecewise(u=self.vpp,
+        self.GP = Piecewise(u=self.IAW_y,
                             points=(0, 'Gv1', 'Gv2', 'Gv3', 'Gv4', 'Gv5', 'Gv6'),
                             funs=(0,
-                                  '(vpp - 0) * Kgp1',
-                                  '(vpp - Gv1) * Kgp2 + Pgv1p',
-                                  '(vpp - Gv2) * Kgp3 + Pgv2p',
-                                  '(vpp - Gv3) * Kgp4 + Pgv3p',
-                                  '(vpp - Gv4) * Kgp5 + Pgv4p',
-                                  '(vpp - Gv5) * Kgp6 + Pgv5p',
-                                  '(vpp - Gv6) * Kgp6 + Pgv6p',
+                                  '(IAW_y - 0) * Kgp1 + 0',
+                                  '(IAW_y - Gv1) * Kgp2 + Pgv1',
+                                  '(IAW_y - Gv2) * Kgp3 + Pgv2',
+                                  '(IAW_y - Gv3) * Kgp4 + Pgv3',
+                                  '(IAW_y - Gv4) * Kgp5 + Pgv4',
+                                  '(IAW_y - Gv5) * Kgp6 + Pgv5',
+                                  '(IAW_y - Gv6) * Kgp6 + Pgv6',
                                   '1'),
                             tex_name='G_{P}',
                             info='normalized steam flow',
                             )
 
-        self.vp = Algeb(info='nominal steam flow',
-                        tex_name='v_{p}',
-                        v_str='tm012',
-                        e_str='GP_y * (PMAX - PMIN) + PMIN - vp',
-                        )
-
-        self.L4.u = self.vp
+        self.L4.u = self.GP_y
 
 
 class IEEEG1PW(IEEEG1):
