@@ -352,7 +352,7 @@ class IEEEG1PWModel(IEEEG1Model):
                 tex_name=f'K_{{gp{i}}}',
             ))
 
-        self.GP = Piecewise(u=self.IAW_y,
+        self.GV = Piecewise(u=self.IAW_y,
                             points=(0, 'Gv1', 'Gv2', 'Gv3', 'Gv4', 'Gv5', 'Gv6'),
                             funs=(0,
                                   '(IAW_y - 0) * Kgp1 + 0',
@@ -363,21 +363,21 @@ class IEEEG1PWModel(IEEEG1Model):
                                   '(IAW_y - Gv5) * Kgp6 + Pgv5',
                                   '(IAW_y - Gv6) * Kgp6 + Pgv6',
                                   '1'),
-                            tex_name='G_{P}',
-                            info='normalized steam flow',
+                            tex_name='G_{V}',
+                            info='steam flow',
                             )
 
-        self.L4.u = self.GP_y
+        self.L4.u = self.GV_y
 
 
 class IEEEG1PW(IEEEG1):
     """
     IEEE Type 1 Speed-Governing Model in PowerWorld.
 
-    The IEEEG1 implementation in PowerWorld and GE PSLF models the boiler as a nonlinear
+    The IEEEG1 implementation in PowerWorld and GE PSLF models the gate-steam as a nonlinear
     process.
 
-    In ANDES implementation, the nonlinear boiler process `GP` is represented as
+    In ANDES implementation, the nonlinear gate-steam `GV` is represented as
     a piecewise linear function, defined by six points: (Gv1, Pgv1), ..., (Gv6, Pgv6).
     Note that Gv1-Gv6 and Pgv1-Pgv6 are normalized values between 0 and 1, which may
     differ from the implementations in PowerWorld and PSLF.
