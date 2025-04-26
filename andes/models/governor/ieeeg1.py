@@ -229,7 +229,7 @@ class IEEEG1SpeedControl:
         self.vs = Algeb(info='Valve speed',
                         tex_name='V_s',
                         v_str='0',
-                        e_str='ue * (LL_y + tm012 + paux - IAW_y) / T3 - vs',
+                        e_str='ue * (LL_y + v0 + paux - IAW_y) / T3 - vs',
                         )
 
         self.HL = HardLimiter(u=self.vs,
@@ -244,22 +244,34 @@ class IEEEG1SpeedControl:
                          e_str='vs * HL_zi + UC * HL_zl + UO * HL_zu - vsl',
                          )
 
+        self.v0 = ConstService(info='Initial valve position')
 
-class IEEEG1ValvePosition:
-    def __init__(self):
         self.IAW = IntegratorAntiWindup(u=self.vsl,
                                         T=1,
                                         K=1,
-                                        y0=self.tm012,
+                                        y0=self.v0,
                                         lower=self.PMIN,
                                         upper=self.PMAX,
                                         info='Valve position integrator')
-        self.L4 = Lag(u=self.IAW_y, T=self.T4, K=1,
-                      info='first process')
+
+
+class IEEEG1ValvePosition:
+    def __init__(self):
+
+        self.v0.v_str = 'tm012'
+
+        self.GV = Algeb(info='steam flow',
+                        tex_name='G_{V}',
+                        v_str='tm012',
+                        e_str='IAW_y - GV')
 
 
 class IEEEG1Turbine:
     def __init__(self):
+
+        self.L4 = Lag(u=self.GV, T=self.T4, K=1,
+                      info='first process',
+                      )
 
         self.L5 = Lag(u=self.L4_y, T=self.T5, K=1,
                       info='second (reheat) process',
@@ -321,14 +333,16 @@ class IEEEG1(IEEEG1Data, IEEEG1Model):
     After a refactoring, the `IEEEG1Model` was separated into `IEEEG1SpeedControl`,
     `IEEEG1ValvePosition`, and `IEEEG1Turbine`.
 
-    `IEEEG1ValvePosition` handles the valve position and the steam flow process.
-    In `IEEEG1`, where this process is considered linear, the output from the valve
-    position `IAW_y` can be considered as passing through a gain block of `1` before
-    being passed to `L4`. Therefore, the flow and the valve position maintain a 1:1
-    linear ratio.
+    In `IEEEG1ValvePosition`, an Algeb `GV` is developed to represent the dynamic
+    of valve position to steam flow.
+    Remember to define the initial valve position `v0`, which is left intentionally
+    black in `IEEEG1SpeedControl`.
 
-    For the nonlinear process, `IAW_y` is passed through a nonlinear function `GV`,
-    and `GV` is then passed to `L4`.
+    In `IEEEG1`, valve position to steam flow is considered linear, and the flow
+    and the valve position maintain a 1:1 linear ratio.
+
+    To model the nonlinear process, the equation of `GV` can be replaced with other
+    nonlinear equations.
     """
 
     def __init__(self, system, config):
@@ -339,25 +353,12 @@ class IEEEG1(IEEEG1Data, IEEEG1Model):
 class IEEEG1ValvePositionNL:
     def __init__(self):
 
-        self.v0 = ConstService(info='Initial valve position',
-                               v_str='exp(tm012 / PMAX) - 1',
-                               )
-        self.IAW = IntegratorAntiWindup(u=self.vsl,
-                                        T=1,
-                                        K=1,
-                                        y0=self.v0,
-                                        lower=self.PMIN,
-                                        upper=self.PMAX,
-                                        info='Valve position integrator',
-                                        )
+        self.v0.v_str = 'tm012'
+
         self.GV = Algeb(info='steam flow',
                         tex_name='G_{V}',
                         v_str='tm012',
-                        e_str='PMAX * log(IAW_y + 1) - GV',
-                        )
-        self.L4 = Lag(u=self.GV, T=self.T4, K=1,
-                      info='first process',)
-        self.vs.e_str = 'ue * (LL_y + v0 + paux - IAW_y) / T3 - vs'
+                        e_str='IAW_y - GV')
 
 
 class IEEEG1NLModel(TGBase):
