@@ -353,12 +353,14 @@ class IEEEG1(IEEEG1Data, IEEEG1Model):
 class IEEEG1ValvePositionNL:
     def __init__(self):
 
-        self.v0.v_str = 'tm012'
+        k = 0.8
 
         self.GV = Algeb(info='steam flow',
                         tex_name='G_{V}',
                         v_str='tm012',
-                        e_str='IAW_y - GV')
+                        e_str=f'IAW_y * {k} - GV')
+
+        self.v0.v_str = f'tm012 / {k}'
 
 
 class IEEEG1NLModel(TGBase):
