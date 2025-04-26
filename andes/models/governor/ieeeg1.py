@@ -328,7 +328,28 @@ class IEEEG1(IEEEG1Data, IEEEG1Model):
         IEEEG1Model.__init__(self, system, config)
 
 
-class IEEEG1NL(IEEEG1):
+class IEEEG1ValvePositionNL:
+    def __init__(self):
+
+        self.IAWy0 = ConstService(info='Initial value of IAW_y',
+                                  v_str='PMAX * (tm012 / PMAX)^2',
+                                  )
+        self.IAW = IntegratorAntiWindup(u=self.vsl,
+                                        T=1,
+                                        K=1,
+                                        y0=self.IAWy0,
+                                        lower=self.PMIN,
+                                        upper=self.PMAX,
+                                        info='Valve position integrator',
+                                        )
+        self.GV = Algeb(info='steam flow',
+                        tex_name='G_{V}',
+                        v_str='tm012',
+                        e_str='PMAX * sqrt(IAW_y / PMAX) - GV',
+                        )
+
+
+class IEEEG1NLModel(TGBase):
     """
     In this implementation, initialization issue still exists, just like in IEEG1PW.
     After TDS.init(), IAW.y != IAW.y0.
@@ -338,20 +359,18 @@ class IEEEG1NL(IEEEG1):
     """
 
     def __init__(self, system, config):
-        IEEEG1.__init__(self, system, config)
-
-        self.IAWy0 = ConstService(info='Initial value of IAW_y',
-                                  v_str='PMAX * (tm012 / PMAX)^2',
-                                  )
-        self.IAW.y0 = self.IAWy0
-
-        self.GV = Algeb(info='steam flow',
-                        tex_name='G_{V}',
-                        v_str='tm012',
-                        e_str='PMAX * sqrt(IAW_y / PMAX) - GV',
-                        )
+        TGBase.__init__(self, system, config, add_sn=False)
+        IEEEG1SpeedControl.__init__(self)
+        IEEEG1ValvePositionNL.__init__(self)
+        IEEEG1Turbine.__init__(self)
 
         self.L4.u = self.GV
+
+
+class IEEEG1NL(IEEEG1Data, IEEEG1NLModel):
+    def __init__(self, system, config):
+        IEEEG1Data.__init__(self)
+        IEEEG1NLModel.__init__(self, system, config)
 
 
 class IEEEG1PWData(IEEEG1Data):
