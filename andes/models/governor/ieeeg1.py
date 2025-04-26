@@ -104,10 +104,8 @@ class IEEEG1Data(TGBaseData):
                            )
 
 
-class IEEEG1Model(TGBase):
-    def __init__(self, system, config):
-        TGBase.__init__(self, system, config, add_sn=False)
-
+class IEEEG1SpeedControl:
+    def __init__(self):
         # check if K1-K8 sums up to 1
         self._sumK18 = ConstService(v_str='K1+K2+K3+K4+K5+K6+K7+K8',
                                     info='summation of K1-K8',
@@ -246,6 +244,9 @@ class IEEEG1Model(TGBase):
                          e_str='vs * HL_zi + UC * HL_zl + UO * HL_zu - vsl',
                          )
 
+
+class IEEEG1ValvePosition:
+    def __init__(self):
         self.IAW = IntegratorAntiWindup(u=self.vsl,
                                         T=1,
                                         K=1,
@@ -255,6 +256,9 @@ class IEEEG1Model(TGBase):
                                         info='Valve position integrator',
                                         )
 
+
+class IEEEG1Turbine:
+    def __init__(self):
         self.L4 = Lag(u=self.IAW_y, T=self.T4, K=1,
                       info='first process',)
 
@@ -283,6 +287,14 @@ class IEEEG1Model(TGBase):
                          )
 
         self.pout.e_str = 'ue * PHP - pout'
+
+
+class IEEEG1Model(TGBase):
+    def __init__(self, system, config):
+        TGBase.__init__(self, system, config, add_sn=False)
+        IEEEG1SpeedControl.__init__(self)
+        IEEEG1ValvePosition.__init__(self)
+        IEEEG1Turbine.__init__(self)
 
 
 class IEEEG1(IEEEG1Data, IEEEG1Model):
