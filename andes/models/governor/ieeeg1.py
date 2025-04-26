@@ -339,13 +339,13 @@ class IEEEG1(IEEEG1Data, IEEEG1Model):
 class IEEEG1ValvePositionNL:
     def __init__(self):
 
-        self.IAWy0 = ConstService(info='Initial valve position',
-                                  v_str='exp(tm012/PMAX) - 1',
-                                  )
+        self.v0 = ConstService(info='Initial valve position',
+                               v_str='exp(tm012 / PMAX) - 1',
+                               )
         self.IAW = IntegratorAntiWindup(u=self.vsl,
                                         T=1,
                                         K=1,
-                                        y0=self.IAWy0,
+                                        y0=self.v0,
                                         lower=self.PMIN,
                                         upper=self.PMAX,
                                         info='Valve position integrator',
@@ -357,7 +357,7 @@ class IEEEG1ValvePositionNL:
                         )
         self.L4 = Lag(u=self.GV, T=self.T4, K=1,
                       info='first process',)
-        self.vs.e_str = 'ue * (LL_y + IAWy0 + paux - IAW_y) / T3 - vs'
+        self.vs.e_str = 'ue * (LL_y + v0 + paux - IAW_y) / T3 - vs'
 
 
 class IEEEG1NLModel(TGBase):
