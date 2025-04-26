@@ -316,6 +316,32 @@ class IEEEG1(IEEEG1Data, IEEEG1Model):
         IEEEG1Model.__init__(self, system, config)
 
 
+class IEEEG1NL(IEEEG1):
+    """
+    In this implementation, initialization issue still exists, just like in IEEG1PW.
+    After TDS.init(), IAW.y != IAW.y0.
+
+    It is suspected that it will not take effect if we define IAW.y0 outside of the
+    definition of IAW.
+    """
+
+    def __init__(self, system, config):
+        IEEEG1.__init__(self, system, config)
+
+        self.IAWy0 = ConstService(info='Initial value of IAW_y',
+                                  v_str='PMAX * (tm012 / PMAX)^2',
+                                  )
+        self.IAW.y0 = self.IAWy0
+
+        self.GV = Algeb(info='steam flow',
+                        tex_name='G_{V}',
+                        v_str='tm012',
+                        e_str='PMAX * sqrt(IAW_y / PMAX) - GV',
+                        )
+
+        self.L4.u = self.GV
+
+
 class IEEEG1PWData(IEEEG1Data):
     def __init__(self):
         IEEEG1Data.__init__(self)
