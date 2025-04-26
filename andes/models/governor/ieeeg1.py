@@ -253,14 +253,13 @@ class IEEEG1ValvePosition:
                                         y0=self.tm012,
                                         lower=self.PMIN,
                                         upper=self.PMAX,
-                                        info='Valve position integrator',
-                                        )
+                                        info='Valve position integrator')
+        self.L4 = Lag(u=self.IAW_y, T=self.T4, K=1,
+                      info='first process')
 
 
 class IEEEG1Turbine:
     def __init__(self):
-        self.L4 = Lag(u=self.IAW_y, T=self.T4, K=1,
-                      info='first process',)
 
         self.L5 = Lag(u=self.L4_y, T=self.T5, K=1,
                       info='second (reheat) process',
@@ -347,6 +346,9 @@ class IEEEG1ValvePositionNL:
                         v_str='tm012',
                         e_str='PMAX * sqrt(IAW_y / PMAX) - GV',
                         )
+        self.L4 = Lag(u=self.GV, T=self.T4, K=1,
+                      info='first process',)
+        self.vs.e_str = 'ue * (LL_y + IAWy0 + paux - IAW_y) / T3 - vs'
 
 
 class IEEEG1NLModel(TGBase):
@@ -363,8 +365,6 @@ class IEEEG1NLModel(TGBase):
         IEEEG1SpeedControl.__init__(self)
         IEEEG1ValvePositionNL.__init__(self)
         IEEEG1Turbine.__init__(self)
-
-        self.L4.u = self.GV
 
 
 class IEEEG1NL(IEEEG1Data, IEEEG1NLModel):
