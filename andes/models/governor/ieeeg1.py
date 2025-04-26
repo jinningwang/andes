@@ -316,10 +316,19 @@ class IEEEG1(IEEEG1Data, IEEEG1Model):
     not sum up to 1.0, they will be normalized. The normalized parameters are
     called ``K1n`` through ``K8n``.
 
-    If initialization error occurs for variable ``vs``, it is due to the limits
-    ``PMIN`` and ``PMAX``.
+    Developer Notes
+    ----------------
+    After a refactoring, the `IEEEG1Model` was separated into `IEEEG1SpeedControl`,
+    `IEEEG1ValvePosition`, and `IEEEG1Turbine`.
 
-    IEEEG1 does not yet support the change of reference (scheduling).
+    `IEEEG1ValvePosition` handles the valve position and the steam flow process.
+    In `IEEEG1`, where this process is considered linear, the output from the valve
+    position `IAW_y` can be considered as passing through a gain block of `1` before
+    being passed to `L4`. Therefore, the flow and the valve position maintain a 1:1
+    linear ratio.
+
+    For the nonlinear process, `IAW_y` is passed through a nonlinear function `GV`,
+    and `GV` is then passed to `L4`.
     """
 
     def __init__(self, system, config):
