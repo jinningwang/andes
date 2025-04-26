@@ -265,13 +265,13 @@ class IEEEG1ValvePosition:
                         v_str='tm012',
                         e_str='IAW_y - GV')
 
-
-class IEEEG1Turbine:
-    def __init__(self):
-
         self.L4 = Lag(u=self.GV, T=self.T4, K=1,
                       info='first process',
                       )
+
+
+class IEEEG1Turbine:
+    def __init__(self):
 
         self.L5 = Lag(u=self.L4_y, T=self.T5, K=1,
                       info='second (reheat) process',
@@ -350,6 +350,40 @@ class IEEEG1(IEEEG1Data, IEEEG1Model):
         IEEEG1Model.__init__(self, system, config)
 
 
+class IEEEG1ValvePositionPL:
+    def __init__(self):
+
+        self.GV = Piecewise(u=self.IAW_y,
+                            points=('PMIN', 'PMAX'),
+                            funs=('PMIN',
+                                  'IAW_y',
+                                  'PMAX'),
+                            info='steam flow',
+                            tex_name='G_{V}',
+                            )
+        self.GV.y.v_iter = self.GV.y.e_str
+
+        self.v0.v_str = 'tm012'
+
+        self.L4 = Lag(u=self.GV_y, T=self.T4, K=1,
+                      info='first process',
+                      )
+
+
+class IEEEG1PLModel(TGBase):
+    def __init__(self, system, config):
+        TGBase.__init__(self, system, config, add_sn=False)
+        IEEEG1SpeedControl.__init__(self)
+        IEEEG1ValvePositionPL.__init__(self)
+        IEEEG1Turbine.__init__(self)
+
+
+class IEEEG1PL(IEEEG1Data, IEEEG1PLModel):
+    def __init__(self, system, config):
+        IEEEG1Data.__init__(self)
+        IEEEG1PLModel.__init__(self, system, config)
+
+
 class IEEEG1ValvePositionNL:
     def __init__(self):
 
@@ -361,6 +395,10 @@ class IEEEG1ValvePositionNL:
                         e_str=f'IAW_y * {k} - GV')
 
         self.v0.v_str = f'tm012 / {k}'
+
+        self.L4 = Lag(u=self.GV, T=self.T4, K=1,
+                      info='first process',
+                      )
 
 
 class IEEEG1NLModel(TGBase):
