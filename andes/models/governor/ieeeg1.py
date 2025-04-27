@@ -493,22 +493,22 @@ class IEEEG1NModel(TGBase):
                          e_str='vs * HL_zi + UC * HL_zl + UO * HL_zu - vsl',
                          )
 
-        self.v0 = ConstService(info='Initial valve position')
-
         self.IAW = IntegratorAntiWindup(u=self.vsl,
                                         T=1,
                                         K=1,
-                                        y0=self.v0,
+                                        y0='v0',
                                         lower=self.PMIN,
                                         upper=self.PMAX,
                                         info='Valve position integrator')
 
-        self.v0.v_str = 'tm012'
+        self.v0 = PostInitService(info='Initial valve position')
 
         self.GV = Algeb(info='steam flow',
                         tex_name='G_{V}',
                         v_str='tm012',
-                        e_str='IAW_y - GV')
+                        e_str='log(IAW_y / PMAX + 1) * PMAX - GV')
+
+        self.v0.v_str = 'PMAX * (exp(tm012 / PMAX) - 1)'
 
         self.L4 = Lag(u=self.GV, T=self.T4, K=1,
                       info='first process',
