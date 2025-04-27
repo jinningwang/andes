@@ -527,11 +527,10 @@ class IEEEG1PW(IEEEG1):
     Developer Notes
     ----------------
     In this implementation, the initialization process has not been fully tuned, and several notes
-    are left here for future reference:
-    1. When Gv1-Gv6, Pgv1-Pgv6 are linearly given, IEEEG1PW works as expected.
-    2. When they are set as a nonlinear function (e.g., sqrt), initialization may encounter issues:
-       - L4.u != L4.y, with no error message in TDS.init()
-       - Cannot find a value for IAW_y different from tm012 that satisfies GV.y.v_iter
+    are left here for future reference. 1) When Gv1-Gv6, Pgv1-Pgv6 are linearly given, IEEEG1PW
+    works as expected. 2) When they are set as a nonlinear function (e.g., sqrt), initialization
+    may encounter issues: L4.u != L4.y, with no error message in TDS.init(). Cannot find a value
+    for IAW_y different from tm012 that satisfies GV.y.v_iter
     """
 
     def __init__(self, system, config):
