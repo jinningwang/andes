@@ -385,26 +385,41 @@ class IEEEG1PWData(IEEEG1Data):
     def __init__(self):
         IEEEG1Data.__init__(self)
 
+        i = 1
+        setattr(self, f'Gv{i}', NumParam(
+            info=f'Gate value-steam flow pair (point {i}), nominal gate value',
+            tex_name=f'G_{{v{i}}}',
+            default=None,
+            power=True,
+        ))
+        setattr(self, f'Pgv{i}', NumParam(
+            info=f'Gate value-steam flow pair (point {i}), nominal steam flow',
+            tex_name=f'P_{{gv{i}}}',
+            unit='p.u.',
+            default=None,
+            power=True,
+        ))
+
         # Define Gv1-Gv6 and Pgv1-Pgv6
-        for i in range(1, 7):
-            setattr(self, f'Gv{i}', NumParam(
-                info=f'Gate value-steam flow pair (point {i}), nominal gate value',
-                tex_name=f'G_{{v{i}}}',
-                default=None,
-                power=True,
-            ))
-            setattr(self, f'Pgv{i}', NumParam(
-                info=f'Gate value-steam flow pair (point {i}), nominal steam flow',
-                tex_name=f'P_{{gv{i}}}',
-                unit='p.u.',
-                default=None,
-                power=True,
-            ))
+        # for i in range(1, 7):
+        #     setattr(self, f'Gv{i}', NumParam(
+        #         info=f'Gate value-steam flow pair (point {i}), nominal gate value',
+        #         tex_name=f'G_{{v{i}}}',
+        #         default=None,
+        #         power=True,
+        #     ))
+        #     setattr(self, f'Pgv{i}', NumParam(
+        #         info=f'Gate value-steam flow pair (point {i}), nominal steam flow',
+        #         tex_name=f'P_{{gv{i}}}',
+        #         unit='p.u.',
+        #         default=None,
+        #         power=True,
+        #     ))
 
 
-class IEEEG1PWModel(IEEEG1Model):
-    def __init__(self, system, config):
-        IEEEG1Model.__init__(self, system, config)
+class IEEEG1ValvePositionPW:
+        
+    def __init__(self):
 
         # Define Kgp1-Kgp6 and Pgv1p-Pgv6p. Is this a bad practice?
         self.Kgp1 = ConstService(
@@ -412,30 +427,53 @@ class IEEEG1PWModel(IEEEG1Model):
             info='Gain of gate value-steam flow pair (point 1)',
             tex_name='K_{gp1}',
         )
-        for i in range(2, 7):
-            setattr(self, f'Kgp{i}', ConstService(
-                v_str=f'(Pgv{i} - Pgv{i-1}) / (Gv{i} - Gv{i-1})',
-                info=f'Gain of gate value-steam flow pair (point {i})',
-                tex_name=f'K_{{gp{i}}}',
-            ))
+        # for i in range(2, 3):
+        #     setattr(self, f'Kgp{i}', ConstService(
+        #         v_str=f'(Pgv{i} - Pgv{i-1}) / (Gv{i} - Gv{i-1})',
+        #         info=f'Gain of gate value-steam flow pair (point {i})',
+        #         tex_name=f'K_{{gp{i}}}',
+        #     ))
 
         self.GV = Piecewise(u=self.IAW_y,
-                            points=('PMIN', 'Gv1', 'Gv2', 'Gv3', 'Gv4', 'Gv5', 'Gv6'),
+                            points=('PMIN', 'Gv1'),
                             funs=('PMIN',
-                                  '(IAW_y - 0) * Kgp1 + 0',
-                                  '(IAW_y - Gv1) * Kgp2 + Pgv1',
-                                  '(IAW_y - Gv2) * Kgp3 + Pgv2',
-                                  '(IAW_y - Gv3) * Kgp4 + Pgv3',
-                                  '(IAW_y - Gv4) * Kgp5 + Pgv4',
-                                  '(IAW_y - Gv5) * Kgp6 + Pgv5',
-                                  '(IAW_y - Gv6) * Kgp6 + Pgv6',
+                                  'IAW_y * Kgp1',
                                   'PMAX'),
                             tex_name='G_{V}',
                             info='steam flow',
                             )
-        self.GV.y.v_iter = self.GV.y.e_str
+        self.GV.y.v_str='tm012'
 
-        self.L4.u = self.GV_y
+        self.IAW.y.v_iter = self.GV.y.e_str
+
+        self.v0.v_str = 'IAW_y'
+
+        self.L4 = Lag(u=self.GV_y, T=self.T4, K=1,
+                      info='first process',
+                      )
+
+        # self.GV = Piecewise(u=self.IAW_y,
+        #                     points=('PMIN', 'Gv1', 'Gv2', 'Gv3', 'Gv4', 'Gv5', 'Gv6'),
+        #                     funs=('PMIN',
+        #                           '(IAW_y - 0) * Kgp1 + 0',
+        #                           '(IAW_y - Gv1) * Kgp2 + Pgv1',
+        #                           '(IAW_y - Gv2) * Kgp3 + Pgv2',
+        #                           '(IAW_y - Gv3) * Kgp4 + Pgv3',
+        #                           '(IAW_y - Gv4) * Kgp5 + Pgv4',
+        #                           '(IAW_y - Gv5) * Kgp6 + Pgv5',
+        #                           '(IAW_y - Gv6) * Kgp6 + Pgv6',
+        #                           'PMAX'),
+        #                     tex_name='G_{V}',
+        #                     info='steam flow',
+        #                     )
+
+
+class IEEEG1PWModel(TGBase):
+    def __init__(self, system, config):
+        TGBase.__init__(self, system, config, add_sn=False)
+        IEEEG1SpeedControl.__init__(self)
+        IEEEG1ValvePositionPW.__init__(self)
+        IEEEG1Turbine.__init__(self)
 
 
 class IEEEG1PW(IEEEG1):
