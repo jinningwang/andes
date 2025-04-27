@@ -5,6 +5,7 @@ from andes.core import (Algeb, ConstService, ExtAlgeb, ExtParam, ExtService,
 from andes.core.block import IntegratorAntiWindup, Piecewise
 from andes.core.service import (FlagValue, InitChecker, NumSelect, ParamCalc,
                                 PostInitService,)
+from andes.core.common import DummyValue
 from andes.models.governor.tgbase import TGBase, TGBaseData
 
 
@@ -364,10 +365,12 @@ class IEEEG1NLValvePosition:
     """
 
     def __init__(self):
+
+        GV = 'log((IAW_y * (1 - TS_y)) / PMAX + 1) * PMAX - GV'
         self.GV = Algeb(info='steam flow',
                         tex_name='G_{V}',
-                        v_str='tm012')
-        self.GV.e_str = '(1 - TS_y) * log(IAW_y / PMAX + 1) * PMAX - GV'
+                        v_str='tm012',
+                        e_str=GV,)
 
         self.v0.v_str = 'PMAX * (exp(tm012 / PMAX) - 1)'
 
@@ -375,13 +378,12 @@ class IEEEG1NLValvePosition:
                       info='first process',
                       )
 
-        self.TS = IntegratorAntiWindup(u=self.GV,
-                                       T=1,
+        self.TS = IntegratorAntiWindup(u='GV - tm012',
+                                       T=self.PMAX,
                                        K=self.CE,
                                        y0=0,
-                                       lower='-1',
-                                       upper='999',
-                                       )
+                                       lower=DummyValue(0),
+                                       upper=DummyValue(1),)
 
 
 class IEEEG1NLModel(TGBase):
