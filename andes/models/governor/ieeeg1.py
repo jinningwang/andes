@@ -338,9 +338,6 @@ class IEEEG1(IEEEG1Data, IEEEG1Model):
     of valve position to steam flow.
     Remember to define the initial valve position `v0`, which is left intentionally
     black in `IEEEG1SpeedControl`.
-
-    In `IEEEG1`, valve position to steam flow is considered linear, and the flow
-    and the valve position maintain a 1:1 linear ratio.
     """
 
     def __init__(self, system, config):
@@ -383,7 +380,8 @@ class IEEEG1NLValvePosition:
                                        K=self.CE,
                                        y0=0,
                                        lower=DummyValue(0),
-                                       upper=DummyValue(1),)
+                                       upper=DummyValue(1),
+                                       info='thermal storage',)
 
 
 class IEEEG1NLModel(TGBase):
@@ -396,6 +394,14 @@ class IEEEG1NLModel(TGBase):
 
 
 class IEEEG1NL(IEEEG1NLData, IEEEG1NLModel):
+    """
+    IEEE Type 1 Speed-Governing Model with Nonlinear Valve Position and Thermal Storage.
+
+    This model extends the `IEEEG1` model by introducing a nonlinear relationship
+    between valve position and steam flow, as well as incorporating a thermal storage
+    component. The nonlinear valve position is represented using a logarithmic function,
+    and the thermal storage is modeled as an integrator with anti-windup.
+    """
 
     def __init__(self, system, config):
         IEEEG1NLData.__init__(self)
