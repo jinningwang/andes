@@ -350,6 +350,203 @@ class IEEEG1(IEEEG1Data, IEEEG1Model):
         IEEEG1Model.__init__(self, system, config)
 
 
+class IEEEG1NModel(TGBase):
+
+    def __init__(self, system, config):
+        TGBase.__init__(self, system, config, add_sn=False)
+
+        # check if K1-K8 sums up to 1
+        self._sumK18 = ConstService(v_str='K1+K2+K3+K4+K5+K6+K7+K8',
+                                    info='summation of K1-K8',
+                                    tex_name=r"\sum_{i=1}^8 K_i"
+                                    )
+
+        self._Kcoeff = ConstService(v_str='1/_sumK18',
+                                    info='normalization factor to be multiplied to K1-K8',
+                                    tex_name='K_{coeff}',
+                                    )
+        self.K1n = ConstService(v_str='K1 * _Kcoeff',
+                                info='normalized K1',
+                                tex_name='K_{1n}',
+                                )
+        self.K2n = ConstService(v_str='K2 * _Kcoeff',
+                                info='normalized K2',
+                                tex_name='K_{2n}',
+                                )
+        self.K3n = ConstService(v_str='K3 * _Kcoeff',
+                                info='normalized K3',
+                                tex_name='K_{3n}',
+                                )
+        self.K4n = ConstService(v_str='K4 * _Kcoeff',
+                                info='normalized K4',
+                                tex_name='K_{4n}',
+                                )
+        self.K5n = ConstService(v_str='K5 * _Kcoeff',
+                                info='normalized K5',
+                                tex_name='K_{5n}',
+                                )
+        self.K6n = ConstService(v_str='K6 * _Kcoeff',
+                                info='normalized K6',
+                                tex_name='K_{6n}',
+                                )
+        self.K7n = ConstService(v_str='K7 * _Kcoeff',
+                                info='normalized K7',
+                                tex_name='K_{7n}',
+                                )
+        self.K8n = ConstService(v_str='K8 * _Kcoeff',
+                                info='normalized K8',
+                                tex_name='K_{8n}',
+                                )
+
+        # check if  `tm0 * (K2 + k4 + K6 + K8) = tm02 *(K1 + K3 + K5 + K7)
+        self._tm0K2 = PostInitService(info='mul of tm0 and (K2n+K4n+K6n+K8n)',
+                                      v_str='zsyn2*tm0*(K2n + K4n + K6n + K8n)',
+                                      )
+        self._tm02K1 = PostInitService(info='mul of tm02 and (K1n+K3n+K5n+K7n)',
+                                       v_str='tm02*(K1n + K3n + K5n + K7n)',
+                                       )
+        self._Pc = InitChecker(u=self._tm0K2,
+                               info='proportionality of tm0 and tm02',
+                               equal=self._tm02K1,
+                               )
+
+        self.Sg2 = ExtParam(src='Sn',
+                            model='SynGen',
+                            indexer=self.syn2,
+                            allow_none=True,
+                            default=0.0,
+                            tex_name='S_{n2}',
+                            info='Rated power of Syn2',
+                            unit='MVA',
+                            export=False,
+                            )
+        self.Sg12 = ParamCalc(self.Sg, self.Sg2, func=np.add,
+                              tex_name="S_{g12}",
+                              info='Sum of generator power ratings',
+                              )
+        self.Sn = NumSelect(self.Tn,
+                            fallback=self.Sg12,
+                            tex_name='S_n',
+                            info='Turbine or Gen rating',
+                            )
+
+        self.zsyn2 = FlagValue(self.syn2,
+                               value=None,
+                               tex_name='z_{syn2}',
+                               info='Exist flags for syn2',
+                               )
+
+        self.tm02 = ExtService(src='tm',
+                               model='SynGen',
+                               indexer=self.syn2,
+                               tex_name=r'\tau_{m02}',
+                               info='Initial mechanical input of syn2',
+                               allow_none=True,
+                               default=0.0,
+                               )
+        self.tm012 = ConstService(info='total turbine power',
+                                  v_str='tm0 + tm02',
+                                  )
+
+        # Note: the following applies `zsyn2` to disable the syn2
+        self.tm2 = ExtAlgeb(src='tm',
+                            model='SynGen',
+                            indexer=self.syn2,
+                            allow_none=True,
+                            tex_name=r'\tau_{m2}',
+                            e_str='zsyn2 * ue * (PLP - tm02)',
+                            info='Mechanical power to syn2',
+                            ename='tm2',
+                            tex_ename=r'\tau_{m2}',
+                            )
+
+        self.wd = Algeb(info='Generator under speed',
+                        unit='p.u.',
+                        tex_name=r'\omega_{dev}',
+                        v_str='0',
+                        e_str='ue * (wref - omega) - wd',
+                        )
+
+        self.LL = LeadLag(u=self.wd,
+                          T1=self.T2,
+                          T2=self.T1,
+                          K=self.K,
+                          info='Signal conditioning for wd',
+                          )
+
+        # `P0` == `tm0`
+        self.vs = Algeb(info='Valve speed',
+                        tex_name='V_s',
+                        v_str='0',
+                        e_str='ue * (LL_y + v0 + paux - IAW_y) / T3 - vs',
+                        )
+
+        self.HL = HardLimiter(u=self.vs,
+                              lower=self.UC,
+                              upper=self.UO,
+                              info='Limiter on valve speed',
+                              )
+
+        self.vsl = Algeb(info='Valve move speed after limiter',
+                         tex_name='V_{sl}',
+                         v_str='vs * HL_zi + UC * HL_zl + UO * HL_zu',
+                         e_str='vs * HL_zi + UC * HL_zl + UO * HL_zu - vsl',
+                         )
+
+        self.v0 = ConstService(info='Initial valve position')
+
+        self.IAW = IntegratorAntiWindup(u=self.vsl,
+                                        T=1,
+                                        K=1,
+                                        y0=self.v0,
+                                        lower=self.PMIN,
+                                        upper=self.PMAX,
+                                        info='Valve position integrator')
+
+        self.v0.v_str = 'tm012'
+
+        self.GV = Algeb(info='steam flow',
+                        tex_name='G_{V}',
+                        v_str='tm012',
+                        e_str='IAW_y - GV')
+
+        self.L4 = Lag(u=self.GV, T=self.T4, K=1,
+                      info='first process',
+                      )
+
+        self.L5 = Lag(u=self.L4_y, T=self.T5, K=1,
+                      info='second (reheat) process',
+                      )
+
+        self.L6 = Lag(u=self.L5_y, T=self.T6, K=1,
+                      info='third process',
+                      )
+
+        self.L7 = Lag(u=self.L6_y, T=self.T7, K=1,
+                      info='fourth (second reheat) process',
+                      )
+
+        self.PHP = Algeb(info='HP output',
+                         tex_name='P_{HP}',
+                         v_str='ue * (K1n*L4_y + K3n*L5_y + K5n*L6_y + K7n*L7_y)',
+                         e_str='ue * (K1n*L4_y + K3n*L5_y + K5n*L6_y + K7n*L7_y) - PHP',
+                         )
+
+        self.PLP = Algeb(info='LP output',
+                         tex_name='P_{LP}',
+                         v_str='ue * (K2n*L4_y + K4n*L5_y + K6n*L6_y + K8n*L7_y)',
+                         e_str='ue * (K2n*L4_y + K4n*L5_y + K6n*L6_y + K8n*L7_y) - PLP',
+                         )
+
+        self.pout.e_str = 'ue * PHP - pout'
+
+
+class IEEEG1N(IEEEG1Data, IEEEG1NModel):
+    def __init__(self, system, config):
+        IEEEG1Data.__init__(self)
+        IEEEG1NModel.__init__(self, system, config)
+
+
 class IEEEG1ValvePositionPL:
     def __init__(self):
 

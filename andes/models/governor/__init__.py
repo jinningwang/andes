@@ -1,5 +1,5 @@
 from andes.models.governor.gast import GAST  # NOQA
-from andes.models.governor.ieeeg1 import IEEEG1, IEEEG1NL, IEEEG1PL, IEEEG1PW  # NOQA
+from andes.models.governor.ieeeg1 import IEEEG1, IEEEG1N, IEEEG1NL, IEEEG1PL, IEEEG1PW  # NOQA
 from andes.models.governor.ieesgo import IEESGO  # NOQA
 from andes.models.governor.tg2 import TG2  # NOQA
 from andes.models.governor.tgov1 import TGOV1NDB  # NOQA
