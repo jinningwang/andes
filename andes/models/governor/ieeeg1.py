@@ -347,6 +347,17 @@ class IEEEG1(IEEEG1Data, IEEEG1Model):
         IEEEG1Model.__init__(self, system, config)
 
 
+class IEEEG1NLData(IEEEG1Data):
+
+    def __init__(self):
+        IEEEG1Data.__init__(self)
+
+        self.CE = NumParam(default=0.0,
+                           tex_name='C_E',
+                           info='thermal storage coefficient',
+                           unit='p.u.')
+
+
 class IEEEG1NLValvePosition:
     """
     Nonlinear valve position to steam flow.
@@ -355,14 +366,22 @@ class IEEEG1NLValvePosition:
     def __init__(self):
         self.GV = Algeb(info='steam flow',
                         tex_name='G_{V}',
-                        v_str='tm012',
-                        e_str='log(IAW_y / PMAX + 1) * PMAX - GV')
+                        v_str='tm012')
+        self.GV.e_str = '(1 - TS_y) * log(IAW_y / PMAX + 1) * PMAX - GV'
 
         self.v0.v_str = 'PMAX * (exp(tm012 / PMAX) - 1)'
 
         self.L4 = Lag(u=self.GV, T=self.T4, K=1,
                       info='first process',
                       )
+
+        self.TS = IntegratorAntiWindup(u=self.GV,
+                                       T=1,
+                                       K=self.CE,
+                                       y0=0,
+                                       lower='-1',
+                                       upper='999',
+                                       )
 
 
 class IEEEG1NLModel(TGBase):
@@ -374,10 +393,10 @@ class IEEEG1NLModel(TGBase):
         IEEEG1Turbine.__init__(self)
 
 
-class IEEEG1NL(IEEEG1Data, IEEEG1NLModel):
+class IEEEG1NL(IEEEG1NLData, IEEEG1NLModel):
 
     def __init__(self, system, config):
-        IEEEG1Data.__init__(self)
+        IEEEG1NLData.__init__(self)
         IEEEG1NLModel.__init__(self, system, config)
 
 
@@ -418,7 +437,7 @@ class IEEEG1PWData(IEEEG1Data):
 
 
 class IEEEG1ValvePositionPW:
-        
+
     def __init__(self):
 
         # Define Kgp1-Kgp6 and Pgv1p-Pgv6p. Is this a bad practice?
@@ -442,7 +461,7 @@ class IEEEG1ValvePositionPW:
                             tex_name='G_{V}',
                             info='steam flow',
                             )
-        self.GV.y.v_str='tm012'
+        self.GV.y.v_str = 'tm012'
 
         self.IAW.y.v_iter = self.GV.y.e_str
 
