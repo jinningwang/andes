@@ -354,7 +354,8 @@ class IEEEG1NLData(IEEEG1Data):
                            tex_name='C_E',
                            info='thermal storage coefficient',
                            ipower=True,
-                           unit='p.u.')
+                           vrange=(90, 300),
+                           unit='s')
 
 
 class IEEEG1NLValvePosition:
