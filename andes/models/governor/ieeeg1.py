@@ -345,7 +345,50 @@ class IEEEG1(IEEEG1Data, IEEEG1Model):
         IEEEG1Model.__init__(self, system, config)
 
 
-class IEEEG1NLData(IEEEG1Data):
+class IEEEG1GVValvePosition:
+    """
+    Nonlinear valve position to steam flow.
+    """
+
+    def __init__(self):
+
+        GV = 'log(1 + IAW_y/ PMAX) * PMAX - GV'
+        self.GV = Algeb(info='steam flow',
+                        tex_name='G_{V}',
+                        v_str='tm012',
+                        e_str=GV,)
+
+        self.v0.v_str = 'PMAX * (exp(tm012 / PMAX) - 1)'
+
+        self.L4 = Lag(u=self.GV, T=self.T4, K=1,
+                      info='first process')
+
+
+class IEEEG1GVModel(TGBase):
+    def __init__(self, system, config):
+        TGBase.__init__(self, system, config, add_sn=False)
+        IEEEG1SpeedControl.__init__(self)
+        IEEEG1GVValvePosition.__init__(self)
+        IEEEG1Turbine.__init__(self)
+
+
+class IEEEG1GV(IEEEG1Data, IEEEG1GVModel):
+    """
+    IEEE Type 1 Speed-Governing Model with Nonlinear Valve Position.
+
+    This model extends the ``IEEEG1`` model by introducing a nonlinear relationship
+    between valve position ``IAW_y`` and steam flow ``GV``.
+
+    The nonlinear between valve position and steam flow is modeled using a logarithmic
+    function.
+    """
+
+    def __init__(self, system, config):
+        IEEEG1Data.__init__(self)
+        IEEEG1GVModel.__init__(self, system, config)
+
+
+class IEEEG1TSData(IEEEG1Data):
 
     def __init__(self):
         IEEEG1Data.__init__(self)
@@ -358,20 +401,20 @@ class IEEEG1NLData(IEEEG1Data):
                            unit='s')
 
 
-class IEEEG1NLValvePosition:
+class IEEEG1TSValvePosition:
     """
-    Nonlinear valve position to steam flow.
+    Thermal storage included in the valve position.
     """
 
     def __init__(self):
 
-        GV = 'log(1 + IAW_y * (1 - TS_y) / PMAX) * PMAX - GV'
+        GV = 'IAW_y * (1 - TS_y) - GV'
         self.GV = Algeb(info='steam flow',
                         tex_name='G_{V}',
                         v_str='tm012',
                         e_str=GV,)
 
-        self.v0.v_str = 'PMAX * (exp(tm012 / PMAX) - 1)'
+        self.v0.v_str = 'tm012'
 
         self.L4 = Lag(u=self.GV, T=self.T4, K=1,
                       info='first process')
@@ -388,33 +431,28 @@ class IEEEG1NLValvePosition:
                                        info='thermal storage')
 
 
-class IEEEG1NLModel(TGBase):
+class IEEEG1TSModel(TGBase):
 
     def __init__(self, system, config):
         TGBase.__init__(self, system, config, add_sn=False)
         IEEEG1SpeedControl.__init__(self)
-        IEEEG1NLValvePosition.__init__(self)
+        IEEEG1TSValvePosition.__init__(self)
         IEEEG1Turbine.__init__(self)
 
 
-class IEEEG1NL(IEEEG1NLData, IEEEG1NLModel):
+class IEEEG1TS(IEEEG1Data, IEEEG1TSModel):
     """
     IEEE Type 1 Speed-Governing Model with Nonlinear Valve Position and Thermal Storage.
 
-    This model extends the ``IEEEG1`` model by introducing a nonlinear relationship
-    between valve position ``IAW_y`` and steam flow ``GV``, along with a linearized
-    thermal storage process ``TS``.
-
-    The nonlinear between valve position and steam flow is modeled using a logarithmic
-    function, while the thermal storage is represented as an integrator with anti-windup.
+    This model extends the ``IEEEG1`` model by introducing a thermal storage process ``TS``.
 
     The thermal storage time constant is determined by the parameter ``CE``; a larger
     value indicates stronger thermal storage capacity in the boiler.
     """
 
     def __init__(self, system, config):
-        IEEEG1NLData.__init__(self)
-        IEEEG1NLModel.__init__(self, system, config)
+        IEEEG1TSData.__init__(self)
+        IEEEG1TSModel.__init__(self, system, config)
 
 
 class IEEEG1PWData(IEEEG1Data):
