@@ -350,9 +350,10 @@ class IEEEG1NLData(IEEEG1Data):
     def __init__(self):
         IEEEG1Data.__init__(self)
 
-        self.CE = NumParam(default=0.0,
+        self.CE = NumParam(default=200,
                            tex_name='C_E',
                            info='thermal storage coefficient',
+                           ipower=True,
                            unit='p.u.')
 
 
@@ -363,7 +364,7 @@ class IEEEG1NLValvePosition:
 
     def __init__(self):
 
-        GV = 'log((IAW_y * (1 - TS_y)) / PMAX + 1) * PMAX - GV'
+        GV = 'log(1 + IAW_y * (1 - TS_y) / PMAX) * PMAX - GV'
         self.GV = Algeb(info='steam flow',
                         tex_name='G_{V}',
                         v_str='tm012',
@@ -372,16 +373,18 @@ class IEEEG1NLValvePosition:
         self.v0.v_str = 'PMAX * (exp(tm012 / PMAX) - 1)'
 
         self.L4 = Lag(u=self.GV, T=self.T4, K=1,
-                      info='first process',
-                      )
+                      info='first process')
 
+        self.TTS = ConstService(v_str='CE * PMAX',
+                                info='thermal storage time constant',
+                                tex_name='T_{TS}')
         self.TS = IntegratorAntiWindup(u='GV - tm012',
-                                       T=self.PMAX,
-                                       K=self.CE,
+                                       T=self.TTS,
+                                       K=1,
                                        y0=0,
                                        lower=DummyValue(0),
                                        upper=DummyValue(1),
-                                       info='thermal storage',)
+                                       info='thermal storage')
 
 
 class IEEEG1NLModel(TGBase):
@@ -397,10 +400,15 @@ class IEEEG1NL(IEEEG1NLData, IEEEG1NLModel):
     """
     IEEE Type 1 Speed-Governing Model with Nonlinear Valve Position and Thermal Storage.
 
-    This model extends the `IEEEG1` model by introducing a nonlinear relationship
-    between valve position and steam flow, as well as incorporating a thermal storage
-    component. The nonlinear valve position is represented using a logarithmic function,
-    and the thermal storage is modeled as an integrator with anti-windup.
+    This model extends the ``IEEEG1`` model by introducing a nonlinear relationship
+    between valve position ``IAW_y`` and steam flow ``GV``, along with a linearized
+    thermal storage process ``TS``.
+
+    The nonlinear between valve position and steam flow is modeled using a logarithmic
+    function, while the thermal storage is represented as an integrator with anti-windup.
+
+    The thermal storage time constant is determined by the parameter ``CE``; a larger
+    value indicates stronger thermal storage capacity in the boiler.
     """
 
     def __init__(self, system, config):
