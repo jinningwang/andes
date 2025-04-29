@@ -455,6 +455,60 @@ class IEEEG1TS(IEEEG1Data, IEEEG1TSModel):
         IEEEG1TSModel.__init__(self, system, config)
 
 
+class IEEEG1TS2ValvePosition:
+    """
+    Including both the nonlinear valve position and the thermal storage process.
+    """
+
+    def __init__(self):
+
+        GV = 'log(1 + IAW_y * (1 - TS_y) / PMAX) * PMAX - GV'
+        self.GV = Algeb(info='steam flow',
+                        tex_name='G_{V}',
+                        v_str='tm012',
+                        e_str=GV,)
+
+        self.v0.v_str = 'PMAX * (exp(tm012 / PMAX) - 1)'
+
+        self.L4 = Lag(u=self.GV, T=self.T4, K=1,
+                      info='first process')
+
+        self.TTS = ConstService(v_str='CE * PMAX',
+                                info='thermal storage time constant',
+                                tex_name='T_{TS}')
+        self.TS = IntegratorAntiWindup(u='GV - tm012',
+                                       T=self.TTS,
+                                       K=1,
+                                       y0=0,
+                                       lower=DummyValue(0),
+                                       upper=DummyValue(1),
+                                       info='thermal storage')
+
+
+class IEEEG1TS2Model(TGBase):
+    def __init__(self, system, config):
+        TGBase.__init__(self, system, config, add_sn=False)
+        IEEEG1SpeedControl.__init__(self)
+        IEEEG1TS2ValvePosition.__init__(self)
+        IEEEG1Turbine.__init__(self)
+
+
+class IEEEG1TS2(IEEEG1Data, IEEEG1TS2Model):
+    """
+    IEEE Type 1 Speed-Governing Model with Nonlinear Valve Position and Thermal Storage.
+
+    This model extends the ``IEEEG1`` model by introducing a thermal storage process ``TS``,
+    and a nonlinear relationship between valve position ``IAW_y`` and steam flow ``GV``.
+
+    The thermal storage time constant is determined by the parameter ``CE``; a larger
+    value indicates stronger thermal storage capacity in the boiler.
+    """
+
+    def __init__(self, system, config):
+        IEEEG1TSData.__init__(self)
+        IEEEG1TS2Model.__init__(self, system, config)
+
+
 class IEEEG1PWData(IEEEG1Data):
     def __init__(self):
         IEEEG1Data.__init__(self)
