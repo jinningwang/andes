@@ -395,7 +395,7 @@ class IEEEG1TSData(IEEEG1Data):
 
         self.CE = NumParam(default=200,
                            tex_name='C_E',
-                           info='thermal storage coefficient',
+                           info='thermal inertia coefficient',
                            ipower=True,
                            vrange=(90, 300),
                            unit='s')
@@ -403,7 +403,7 @@ class IEEEG1TSData(IEEEG1Data):
 
 class IEEEG1TSValvePosition:
     """
-    Thermal storage included in the valve position.
+    Thermal inertia is included in the valve position.
     """
 
     def __init__(self):
@@ -420,7 +420,7 @@ class IEEEG1TSValvePosition:
                       info='first process')
 
         self.TTS = ConstService(v_str='CE * PMAX',
-                                info='thermal storage time constant',
+                                info='thermal inertia time constant',
                                 tex_name='T_{TS}')
         self.TS = IntegratorAntiWindup(u='GV - tm012',
                                        T=self.TTS,
@@ -428,7 +428,7 @@ class IEEEG1TSValvePosition:
                                        y0=0,
                                        lower=DummyValue(0),
                                        upper=DummyValue(1),
-                                       info='thermal storage')
+                                       info='thermal inertia')
 
 
 class IEEEG1TSModel(TGBase):
@@ -442,12 +442,12 @@ class IEEEG1TSModel(TGBase):
 
 class IEEEG1TS(IEEEG1Data, IEEEG1TSModel):
     """
-    IEEE Type 1 Speed-Governing Model with Nonlinear Valve Position and Thermal Storage.
+    IEEE Type 1 Speed-Governing Model with Nonlinear Valve Position and Thermal Inertia.
 
-    This model extends the ``IEEEG1`` model by introducing a thermal storage process ``TS``.
+    This model extends the ``IEEEG1`` model by introducing a thermal inertia process ``TS``.
 
-    The thermal storage time constant is determined by the parameter ``CE``; a larger
-    value indicates stronger thermal storage capacity in the boiler.
+    The thermal inertia time constant is determined by the parameter ``CE``; a larger
+    value indicates stronger thermal inertia in the boiler.
     """
 
     def __init__(self, system, config):
@@ -457,7 +457,7 @@ class IEEEG1TS(IEEEG1Data, IEEEG1TSModel):
 
 class IEEEG1TS2ValvePosition:
     """
-    Including both the nonlinear valve position and the thermal storage process.
+    Including both the nonlinear valve position and the thermal inertia process.
     """
 
     def __init__(self):
@@ -474,7 +474,7 @@ class IEEEG1TS2ValvePosition:
                       info='first process')
 
         self.TTS = ConstService(v_str='CE * PMAX',
-                                info='thermal storage time constant',
+                                info='thermal inertia time constant',
                                 tex_name='T_{TS}')
         self.TS = IntegratorAntiWindup(u='GV - tm012',
                                        T=self.TTS,
@@ -482,7 +482,7 @@ class IEEEG1TS2ValvePosition:
                                        y0=0,
                                        lower=DummyValue(0),
                                        upper=DummyValue(1),
-                                       info='thermal storage')
+                                       info='thermal inertia')
 
 
 class IEEEG1TS2Model(TGBase):
@@ -495,13 +495,13 @@ class IEEEG1TS2Model(TGBase):
 
 class IEEEG1TS2(IEEEG1Data, IEEEG1TS2Model):
     """
-    IEEE Type 1 Speed-Governing Model with Nonlinear Valve Position and Thermal Storage.
+    IEEE Type 1 Speed-Governing Model with Nonlinear Valve Position and Thermal Inertia.
 
-    This model extends the ``IEEEG1`` model by introducing a thermal storage process ``TS``,
+    This model extends the ``IEEEG1`` model by introducing a thermal inertia process ``TS``,
     and a nonlinear relationship between valve position ``IAW_y`` and steam flow ``GV``.
 
-    The thermal storage time constant is determined by the parameter ``CE``; a larger
-    value indicates stronger thermal storage capacity in the boiler.
+    The thermal inertia time constant is determined by the parameter ``CE``; a larger
+    value indicates stronger thermal inertia in the boiler.
     """
 
     def __init__(self, system, config):
