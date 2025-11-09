@@ -84,7 +84,7 @@ class ImplicitIter:
             # is pegged by the anti-windup limiters.
 
             # solve implicit trapezoidal method (ITM) integration
-            if tds.config.g_scale > 0:
+            if tds.config.g_scale > 0 and not isinstance(tds.method, QSS):
                 gxs = tds.config.g_scale * tds.h * dae.gx
                 gys = tds.config.g_scale * tds.h * dae.gy
             else:
@@ -103,7 +103,7 @@ class ImplicitIter:
                     np.put(tds.qg, key, eqval)
 
             # set or scale the algebraic residuals
-            if tds.config.g_scale > 0:
+            if tds.config.g_scale > 0 and not isinstance(tds.method, QSS):
                 tds.qg[dae.n:] = tds.config.g_scale * tds.h * dae.g
             else:
                 tds.qg[dae.n:] = dae.g
@@ -270,9 +270,41 @@ class Trapezoid(ImplicitIter):
         return Tf * (x - x0) - h * 0.5 * (f + f0)
 
 
+class QSS(ImplicitIter):
+    """
+    QSS integrator.
+    Enforce f(x, y) = 0 and g(x, y) = 0 at each macro time point.
+
+    Notes
+    -----
+    * No dependence on h, x0, or f0 in the top residual.
+    * Uses unscaled Jacobians if g_scale is off; when g_scale>0 your step()
+      already avoids scaling for QSS (see the `not isinstance(tds.method, QSS)` guard).
+    """
+
+    @staticmethod
+    def calc_jac(tds, gxs, gys):
+        """
+        Build the bordered Jacobian for QSS.
+        """
+        dae = tds.system.dae
+
+        return sparse([[dae.fx, gxs],
+                       [dae.fy, gys]], 'd')
+
+    @staticmethod
+    def calc_q(x, f, Tf, h, x0, f0):
+        """
+        QSS top residual is simply f(x, y).
+        (Tf, h, x0, f0 are unused for QSS.)
+        """
+        return f
+
+
 # --- solution method name-to-class mapping ---
 # !!! add new solvers to below
 
 method_map = {"trapezoid": Trapezoid,
               "backeuler": BackEuler,
+              "qss": QSS,
               }

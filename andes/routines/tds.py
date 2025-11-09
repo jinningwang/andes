@@ -1083,6 +1083,10 @@ class TDS(BaseRoutine):
 
         self.method = method_map[name]()
 
+        if name == "qss":
+            if self.config.g_scale != 0:
+                logger.info("[TDS].g_scale is ineffective for QSS.")
+
     def check_criteria(self):
         """
         Check stability criteria.
