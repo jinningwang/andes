@@ -84,7 +84,7 @@ class ImplicitIter:
             # is pegged by the anti-windup limiters.
 
             # solve implicit trapezoidal method (ITM) integration
-            if tds.config.g_scale > 0 and not isinstance(tds.method, QSS):
+            if tds.config.g_scale > 0:
                 gxs = tds.config.g_scale * tds.h * dae.gx
                 gys = tds.config.g_scale * tds.h * dae.gy
             else:
@@ -103,7 +103,7 @@ class ImplicitIter:
                     np.put(tds.qg, key, eqval)
 
             # set or scale the algebraic residuals
-            if tds.config.g_scale > 0 and not isinstance(tds.method, QSS):
+            if tds.config.g_scale > 0:
                 tds.qg[dae.n:] = tds.config.g_scale * tds.h * dae.g
             else:
                 tds.qg[dae.n:] = dae.g
@@ -288,9 +288,9 @@ class QSS(ImplicitIter):
         Build the bordered Jacobian for QSS.
         """
         dae = tds.system.dae
-
-        return sparse([[dae.fx, gxs],
-                       [dae.fy, gys]], 'd')
+        h_scale = tds.h if tds.h > 0 else 1.0
+        return sparse([[h_scale * dae.fx, gxs],
+                       [h_scale * dae.fy, gys]], 'd')
 
     @staticmethod
     def calc_q(x, f, Tf, h, x0, f0):
@@ -298,7 +298,8 @@ class QSS(ImplicitIter):
         QSS top residual is simply f(x, y).
         (Tf, h, x0, f0 are unused for QSS.)
         """
-        return f
+        h_scale = h if h > 0 else 1.0
+        return h_scale * f
 
 
 # --- solution method name-to-class mapping ---
